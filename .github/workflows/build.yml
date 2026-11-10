@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -40,16 +40,21 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          # Add deadsnakes PPA for Python 2 (required by OrangeFox build)
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
           sudo apt-get update
           sudo apt-get install -y \
-            git-core python2 python python3 git-lfs aria2 \
+            git-core python2.7 python3 git-lfs aria2 \
             zlib1g-dev openjdk-11-jdk libssl-dev libncurses5 \
-            bison flex gperf libxml2-utils liblz4-tool \
+            bison flex gperf libxml2-utils lz4 \
             lib32ncurses5-dev lib32z1 lib32stdc++6 zip \
             libncurses5-dev libtinfo5 libssl-dev \
             build-essential bc cpio
           # Set python2 as default python (required by OrangeFox build)
-          sudo ln -sf /usr/bin/python2 /usr/bin/python
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
+          sudo ln -sf /usr/bin/python2.7 /usr/bin/python
           python --version
           java -version
 
