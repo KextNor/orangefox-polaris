@@ -121,14 +121,25 @@ jobs:
           echo "=== Last 100 lines of build log ==="
           tail -100 $HOME/fox_12.1/build.log 2>/dev/null || echo "No build log"
 
+      - name: Collect artifacts
+        if: always()
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/artifacts
+          cp -f $HOME/fox_12.1/out/target/product/polaris/*.img $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/*.zip $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/*.md5 $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/build.log $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          ls -lh $GITHUB_WORKSPACE/artifacts/
+
       - name: Upload build artifacts
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: OrangeFox-polaris
           path: |
-            ${{ env.HOME }}/fox_12.1/out/target/product/polaris/*.img
-            ${{ env.HOME }}/fox_12.1/out/target/product/polaris/*.zip
+            artifacts/*.img
+            artifacts/*.zip
+            artifacts/*.md5
           retention-days: 30
 
       - name: Upload build log
@@ -136,5 +147,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: ${{ env.HOME }}/fox_12.1/build.log
+          path: artifacts/build.log
           retention-days: 7
