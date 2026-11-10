@@ -62,7 +62,7 @@ jobs:
         run: |
           cd $HOME
           git clone https://gitlab.com/OrangeFox/sync.git OrangeFox_sync
-          cd OrangeFox_sync/sync
+          cd OrangeFox_sync
           ./orangefox_sync.sh --branch 12.1 --path $HOME/fox_12.1
           echo "=== Sync complete ==="
           df -h
