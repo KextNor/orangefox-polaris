@@ -95,12 +95,17 @@ jobs:
       - name: Build OrangeFox Recovery
         run: |
           cd $HOME/fox_12.1
-          set -o pipefail
+          set +e
           export ALLOW_MISSING_DEPENDENCIES=true
           export FOX_BUILD_DEVICE=polaris
           export LC_ALL="C"
+          echo "=== Sourcing envsetup.sh ==="
           source build/envsetup.sh
+          echo "=== envsetup.sh done, exit: $? ==="
+          echo "=== Running lunch ==="
           lunch twrp_polaris-eng
+          echo "=== lunch done, exit: $? ==="
+          echo "=== Starting build ==="
           mka adbd recoveryimage 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           echo "=== Build exit code: $BUILD_EXIT ==="
