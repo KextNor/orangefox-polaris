@@ -1,0 +1,115 @@
+name: Build OrangeFox Recovery for polaris
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Display disk space
+        run: df -h
+
+      - name: Free up disk space
+        run: |
+          echo "=== Freeing up disk space ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/azure-pipelines
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          echo "=== Disk space after cleanup ==="
+          df -h
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git-core python2 python python3 git-lfs aria2 \
+            zlib1g-dev openjdk-11-jdk libssl-dev libncurses5 \
+            bison flex gperf libxml2-utils liblz4-tool \
+            lib32ncurses5-dev lib32z1 lib32stdc++6 zip \
+            libncurses5-dev libtinfo5 libssl-dev \
+            build-essential bc cpio
+          # Set python2 as default python (required by OrangeFox build)
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
+          python --version
+          java -version
+
+      - name: Sync OrangeFox sources (fox_12.1)
+        run: |
+          cd $HOME
+          git clone https://gitlab.com/OrangeFox/sync.git OrangeFox_sync
+          cd OrangeFox_sync/sync
+          ./orangefox_sync.sh --branch 12.1 --path $HOME/fox_12.1
+          echo "=== Sync complete ==="
+          df -h
+
+      - name: Setup device tree
+        run: |
+          cd $HOME/fox_12.1
+          mkdir -p device/xiaomi
+          # Clone official polaris tree (contains prebuilt kernel)
+          git clone --depth=1 https://gitlab.com/OrangeFox/device/polaris.git -b fox_12.1 device/xiaomi/polaris
+          # Copy custom device tree files from this repo (overrides official)
+          cp -f $GITHUB_WORKSPACE/Android.mk device/xiaomi/polaris/
+          cp -f $GITHUB_WORKSPACE/AndroidProducts.mk device/xiaomi/polaris/
+          cp -f $GITHUB_WORKSPACE/BoardConfig.mk device/xiaomi/polaris/
+          cp -f $GITHUB_WORKSPACE/board-info.txt device/xiaomi/polaris/
+          cp -f $GITHUB_WORKSPACE/twrp_polaris.mk device/xiaomi/polaris/
+          cp -f $GITHUB_WORKSPACE/vendorsetup.sh device/xiaomi/polaris/
+          echo "=== Device tree setup complete ==="
+          ls -la device/xiaomi/polaris/
+
+      - name: Build OrangeFox Recovery
+        run: |
+          cd $HOME/fox_12.1
+          /bin/bash -c "
+            export ALLOW_MISSING_DEPENDENCIES=true
+            export FOX_BUILD_DEVICE=polaris
+            export LC_ALL='C'
+            source build/envsetup.sh
+            lunch twrp_polaris-eng
+            mka adbd recoveryimage 2>&1 | tee build.log
+          "
+          echo "=== Build exit code: $? ==="
+          echo "=== Disk space after build ==="
+          df -h
+
+      - name: Show build output
+        if: always()
+        run: |
+          ls -lh $HOME/fox_12.1/out/target/product/polaris/*.img 2>/dev/null || echo "No .img files found"
+          ls -lh $HOME/fox_12.1/out/target/product/polaris/*.zip 2>/dev/null || echo "No .zip files found"
+          echo "=== Last 100 lines of build log ==="
+          tail -100 $HOME/fox_12.1/build.log 2>/dev/null || echo "No build log"
+
+      - name: Upload build artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeFox-polaris
+          path: |
+            ${{ env.HOME }}/fox_12.1/out/target/product/polaris/*.img
+            ${{ env.HOME }}/fox_12.1/out/target/product/polaris/*.zip
+          retention-days: 30
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ${{ env.HOME }}/fox_12.1/build.log
+          retention-days: 7
