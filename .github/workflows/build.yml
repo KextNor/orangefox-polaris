@@ -58,8 +58,17 @@ jobs:
           python --version
           java -version
 
+          # Install repo tool (required by OrangeFox sync script)
+          mkdir -p $HOME/.bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > $HOME/.bin/repo
+          chmod a+rx $HOME/.bin/repo
+          echo "export PATH=$HOME/.bin:$PATH" >> $HOME/.bashrc
+          export PATH=$HOME/.bin:$PATH
+          repo --version
+
       - name: Sync OrangeFox sources (fox_12.1)
         run: |
+          export PATH=$HOME/.bin:$PATH
           cd $HOME
           git clone https://gitlab.com/OrangeFox/sync.git OrangeFox_sync
           cd OrangeFox_sync
