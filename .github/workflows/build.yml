@@ -113,6 +113,19 @@ jobs:
             grep -A6 "R12 interface refresh" "$f"
           done
 
+      - name: Patch fstab (show logical partitions in Manage Partitions)
+        run: |
+          cd $HOME/fox_12.1
+          # TWRP/OrangeFox only lists partitions with Wipe_Available_in_GUI in the
+          # "Manage Partitions" page. The stock dynamic fstab mounts system/vendor
+          # read-only, so they are filtered out. Adding the "formattable" flag
+          # makes them appear there (same behaviour as R11).
+          for f in $(find device/xiaomi/sdm845-common -name 'recovery-dynamic.fstab'); do
+            echo "=== patching $f ==="
+            sed -i 's#\(wait,logical,first_stage_mount\)#\1,formattable#' "$f"
+            grep -nE '^(system|system_ext|product|vendor|odm)[[:space:]]' "$f"
+          done
+
       - name: Build OrangeFox Recovery
         run: |
           cd $HOME/fox_12.1
