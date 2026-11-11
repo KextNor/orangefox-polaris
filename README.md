@@ -10,7 +10,7 @@
 - 源码基线：OrangeFox `fox_12.1`（`FOX_INTERNAL_RELEASE = R12.0`）
 - 版本号：`R12.0_1`
 - 维护者：ZiLing_Fox
-
+- 我的目标/计划都会在我创建的issues提出，大家有什么意见都可以在我的issues下面提出，但是bug，必须新建一个issue，我的issue不予回答ovo
 ---
 
 ## 一、刷入与测试（先看这里）
