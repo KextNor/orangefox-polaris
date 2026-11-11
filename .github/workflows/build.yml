@@ -111,6 +111,8 @@ jobs:
           mkdir -p device/xiaomi
           # Clone official polaris tree (contains prebuilt kernel)
           git clone --depth=1 https://gitlab.com/OrangeFox/device/polaris.git -b fox_12.1 device/xiaomi/polaris
+          # Clone the common tree now; Patch fstab runs before lunch would fetch it.
+          git clone --depth=1 https://gitlab.com/OrangeFox/device/sdm845-common.git -b fox_12.1 device/xiaomi/sdm845-common
           # Copy custom device tree files from this repo (overrides official)
           cp -f $GITHUB_WORKSPACE/Android.mk device/xiaomi/polaris/
           cp -f $GITHUB_WORKSPACE/AndroidProducts.mk device/xiaomi/polaris/
@@ -146,10 +148,19 @@ jobs:
           # "Manage Partitions" page. The stock dynamic fstab mounts system/vendor
           # read-only, so they are filtered out. Adding the "formattable" flag
           # makes them appear there (same behaviour as R11).
-          for f in $(find device/xiaomi/sdm845-common -name 'recovery-dynamic.fstab'); do
+          mapfile -t fstabs < <(find device/xiaomi/sdm845-common -name 'recovery-dynamic.fstab')
+          if [ ${#fstabs[@]} -eq 0 ]; then
+            echo "::error::No recovery-dynamic.fstab found; the common device tree was not cloned correctly"
+            exit 1
+          fi
+          for f in "${fstabs[@]}"; do
             echo "=== patching $f ==="
             sed -i 's#\(wait,logical,first_stage_mount\)#\1,formattable#' "$f"
             grep -nE '^(system|system_ext|product|vendor|odm)[[:space:]]' "$f"
+            if ! grep -Eq '^(system|system_ext|product|vendor|odm)[[:space:]].*formattable' "$f"; then
+              echo "::error::Failed to add formattable to $f"
+              exit 1
+            fi
           done
 
       - name: Build OrangeFox Recovery
