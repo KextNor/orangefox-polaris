@@ -20,3 +20,12 @@
 # Inherit from common sdm845 BoardConfig
 include device/xiaomi/sdm845-common/BoardConfigCommon.mk
 #
+
+# 与官方 R11 行为保持一致：
+# 1) 不使用 AVB 签名。通用树会用 AOSP 测试密钥给 recovery 签名，
+#    与设备 vbmeta 中的密钥不匹配，写进分区后 bootloader 校验失败 -> 黑屏重启。
+BOARD_AVB_ENABLE :=
+# 2) 不做分区对齐填充。通用树会把镜像 padding 到 67108864 字节（正好等于分区大小），
+#    部分 fastboot 在传输"占满分区的镜像"时会卡在 sending。
+BOARD_RECOVERYIMAGE_PARTITION_SIZE :=
+#
