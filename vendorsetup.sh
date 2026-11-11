@@ -55,8 +55,15 @@ if [ "$1" = "$FDEVICE" -o "$FOX_BUILD_DEVICE" = "$FDEVICE" ]; then
 
 	# --- Maintainer Info ---
 	export OF_MAINTAINER="ZiLing_Fox"
-	export FOX_MAINTAINER_PATCH_VERSION="1"
+	export FOX_MAINTAINER_PATCH_VERSION="2"
 	# --- End Maintainer Info ---
+
+	# --- Device Fixes ---
+	# polaris ships keymaster 4.0 on Android 12+ ROMs; the common tree
+	# defaults to the keymaster 3.0 vintf manifest, which breaks FBE
+	# decryption (and therefore the app manager).
+	export FOX_USE_KEYMASTER_4=1
+	# --- End Device Fixes ---
 else
 	if [ -z "$FOX_BUILD_DEVICE" -a -z "$BASH_SOURCE" ]; then
 		echo "I: This script requires bash. Not processing the $FDEVICE $(basename $0)"
