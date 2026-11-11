@@ -44,35 +44,51 @@ jobs:
       - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
         run: |
-          # Kill anything holding the dpkg lock (unattended-upgrades on fresh runners)
-          sudo systemctl stop unattended-upgrades || true
-          sudo killall -9 unattended-upgrades || true
-          # Add deadsnakes PPA for Python 2 (required by OrangeFox build)
-          sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 update
-          sudo apt-get -o DPkg::Lock::Timeout=180 install -y software-properties-common
-          sudo add-apt-repository -y ppa:deadsnakes/ppa
-          sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 update
-          sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 install -y \
-            git-core python2.7 python3 git-lfs aria2 \
-            zlib1g-dev openjdk-11-jdk libssl-dev libncurses5 \
-            bison flex gperf libxml2-utils lz4 \
-            lib32ncurses5-dev lib32z1 lib32stdc++6 zip \
-            libncurses5-dev libtinfo5 libssl-dev \
-            build-essential bc cpio
-          # Set python2 as default python (required by OrangeFox build)
-          sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
-          sudo ln -sf /usr/bin/python2.7 /usr/bin/python
-          python --version
-          java -version
+          log="$RUNNER_TEMP/install-dependencies.log"
+          report_result() {
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              tail -100 "$log" || true
+              summary=$(tail -5 "$log" | tr '\n' ' ' | cut -c1-1200)
+              echo "::error::Dependency installation failed (exit $rc): $summary"
+            else
+              tail -20 "$log"
+            fi
+          }
+          trap report_result EXIT
+          {
+            # Stop background package updates without killing dpkg mid-transaction.
+            sudo systemctl disable --now apt-daily.timer apt-daily-upgrade.timer || true
+            sudo systemctl stop apt-daily.service apt-daily-upgrade.service unattended-upgrades.service || true
+            sudo dpkg --configure -a
+            # Add deadsnakes PPA for Python 2 (required by OrangeFox build)
+            sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 update
+            sudo apt-get -o DPkg::Lock::Timeout=180 install -y software-properties-common
+            sudo add-apt-repository -y ppa:deadsnakes/ppa
+            sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 update
+            sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 install -y \
+              git-core python2.7 python3 git-lfs aria2 \
+              zlib1g-dev openjdk-11-jdk libssl-dev libncurses5 \
+              bison flex gperf libxml2-utils lz4 \
+              lib32ncurses5-dev lib32z1 lib32stdc++6 zip \
+              libncurses5-dev libtinfo5 libssl-dev \
+              build-essential bc cpio
+            # Set python2 as default python (required by OrangeFox build)
+            sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
+            sudo ln -sf /usr/bin/python2.7 /usr/bin/python
+            python --version
+            java -version
 
-          # Install repo tool (required by OrangeFox sync script)
-          mkdir -p $HOME/.bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > $HOME/.bin/repo
-          chmod a+rx $HOME/.bin/repo
-          echo "export PATH=$HOME/.bin:$PATH" >> $HOME/.bashrc
-          export PATH=$HOME/.bin:$PATH
-          repo --version
+            # Install repo tool (required by OrangeFox sync script)
+            mkdir -p $HOME/.bin
+            curl https://storage.googleapis.com/git-repo-downloads/repo > $HOME/.bin/repo
+            chmod a+rx $HOME/.bin/repo
+            echo "export PATH=$HOME/.bin:$PATH" >> $HOME/.bashrc
+            export PATH=$HOME/.bin:$PATH
+            repo --version
+          } >"$log" 2>&1
 
       - name: Sync OrangeFox sources (fox_12.1)
         run: |
