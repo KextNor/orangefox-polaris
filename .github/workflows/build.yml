@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -149,3 +152,28 @@ jobs:
           name: build-log
           path: artifacts/build.log
           retention-days: 7
+
+      - name: Publish release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd $GITHUB_WORKSPACE
+          # 统计已有 Fix 前缀的 release 数量，自动递增
+          n=$(gh release list --limit 200 --json tagName --jq '[.[] | select(.tagName | startswith("Fix"))] | length')
+          n=$((n+1))
+          tag="Fix${n}-v12.0_1-polaris"
+          echo "Creating release: $tag"
+          gh release create "$tag" \
+            artifacts/*.img artifacts/*.zip artifacts/*.md5 \
+            --title "OrangeFox R12.0_1 (${tag}) - Xiaomi Mi MIX 2S (polaris)" \
+            --notes "OrangeFox Recovery R12.0_1 (Unofficial) for Xiaomi Mi MIX 2S (polaris)
+
+          - Base: OrangeFox fox_12.1 sources (FOX_INTERNAL_RELEASE R12.0)
+          - Maintainer: ZiLing_Fox
+          - Build: GitHub Actions / ubuntu-22.04 / commit ${GITHUB_SHA}
+
+          Install:
+          - fastboot flash recovery OrangeFox-R12.0_1-Unofficial-polaris.img
+          - or flash the .zip from an existing recovery"
+
