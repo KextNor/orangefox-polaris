@@ -148,9 +148,9 @@ jobs:
         if: always()
         run: |
           mkdir -p $GITHUB_WORKSPACE/artifacts
-          cp -f $HOME/fox_12.1/out/target/product/polaris/*.img $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_12.1/out/target/product/polaris/*.zip $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_12.1/out/target/product/polaris/*.md5 $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.img $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.zip $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.md5 $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
           cp -f $HOME/fox_12.1/build.log $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
           ls -lh $GITHUB_WORKSPACE/artifacts/
 
