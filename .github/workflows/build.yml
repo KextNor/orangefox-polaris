@@ -46,6 +46,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
+          set -o pipefail
           log="$RUNNER_TEMP/install-dependencies.log"
           report_result() {
             rc=$?
@@ -63,10 +64,14 @@ jobs:
             sudo systemctl disable --now apt-daily.timer apt-daily-upgrade.timer || true
             sudo systemctl stop apt-daily.service apt-daily-upgrade.service unattended-upgrades.service || true
             sudo dpkg --configure -a
-            # Add deadsnakes PPA for Python 2 (required by OrangeFox build)
+            # Add deadsnakes directly. add-apt-repository queries Launchpad's API,
+            # which hung for 18 minutes and ended in RemoteDisconnected on run #27.
             sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 update
-            sudo apt-get -o DPkg::Lock::Timeout=180 install -y software-properties-common
-            sudo add-apt-repository -y ppa:deadsnakes/ppa
+            curl -fsSL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
+              | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/deadsnakes.gpg
+            echo "deb [signed-by=/usr/share/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu jammy main" \
+              | sudo tee /etc/apt/sources.list.d/deadsnakes.list
             sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 update
             sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 install -y \
               git-core python2.7 python3 git-lfs aria2 \
