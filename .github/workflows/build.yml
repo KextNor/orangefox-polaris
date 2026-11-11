@@ -95,6 +95,24 @@ jobs:
           echo "=== Device tree setup complete ==="
           ls -la device/xiaomi/polaris/
 
+      - name: Customize theme (avatar + credits)
+        run: |
+          cd $HOME/fox_12.1
+          # 1) About 页面的维护者头像：主题资源 Default/About/maintainer.png
+          echo "=== Avatar targets ==="
+          find bootable/recovery/gui/theme -path "*About/maintainer.png" -print
+          find bootable/recovery/gui/theme -path "*About/maintainer.png" -exec cp -f $GITHUB_WORKSPACE/avatar.png {} \;
+
+          # 2) Credits：定位 "R12 interface refresh" 所在文件并插入名字
+          echo "=== Credits candidates ==="
+          hits=$(grep -rl "R12 interface refresh" bootable vendor device 2>/dev/null | head -5)
+          echo "$hits"
+          for f in $hits; do
+            awk '1; /R12 interface refresh/{print "    ZiLing_Fox (polaris maintainer)"}' "$f" > "$f.new" && mv "$f.new" "$f"
+            echo "patched: $f"
+            grep -A6 "R12 interface refresh" "$f"
+          done
+
       - name: Build OrangeFox Recovery
         run: |
           cd $HOME/fox_12.1
