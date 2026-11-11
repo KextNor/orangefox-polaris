@@ -11,7 +11,7 @@
 - 版本号：`R12.0_1`
 - 维护者：ZiLing_Fox
 - 我的目标/计划都会在我创建的issues提出，大家有什么意见都可以在我的issues下面提出，但是bug，必须新建一个issue，我的issue不予回答ovo
-- 感谢🐾白墨🐾Whiteink🐾(https://github.com/ Whiteink666)给我提出的建议
+- 感谢🐾白墨🐾Whiteink🐾给我提出的建议
 ---
 
 ## 一、刷入与测试（先看这里）
