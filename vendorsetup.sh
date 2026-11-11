@@ -55,7 +55,7 @@ if [ "$1" = "$FDEVICE" -o "$FOX_BUILD_DEVICE" = "$FDEVICE" ]; then
 
 	# --- Maintainer Info ---
 	export OF_MAINTAINER="ZiLing_Fox"
-	export FOX_MAINTAINER_PATCH_VERSION="2"
+	export FOX_MAINTAINER_PATCH_VERSION="3"
 	# --- End Maintainer Info ---
 
 	# --- Device Fixes ---
