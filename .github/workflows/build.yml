@@ -139,6 +139,8 @@ jobs:
         run: |
           ls -lh $HOME/fox_12.1/out/target/product/polaris/*.img 2>/dev/null || echo "No .img files found"
           ls -lh $HOME/fox_12.1/out/target/product/polaris/*.zip 2>/dev/null || echo "No .zip files found"
+          echo "=== Exact image size (bytes) ==="
+          stat -c '%n %s' $HOME/fox_12.1/out/target/product/polaris/*.img 2>/dev/null || echo "n/a"
           echo "=== Last 100 lines of build log ==="
           tail -100 $HOME/fox_12.1/build.log 2>/dev/null || echo "No build log"
 
@@ -177,13 +179,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd $GITHUB_WORKSPACE
+          shopt -s nullglob
+          files=(artifacts/*.img artifacts/*.zip artifacts/*.md5)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "没有可发布的产物，跳过 release"
+            exit 0
+          fi
+          ls -l "${files[@]}"
           # 统计已有 Fix 前缀的 release 数量，自动递增
           n=$(gh release list --limit 200 --json tagName --jq '[.[] | select(.tagName | startswith("Fix"))] | length')
           n=$((n+1))
           tag="Fix${n}-v12.0_1-polaris"
           echo "Creating release: $tag"
-          gh release create "$tag" \
-            artifacts/*.img artifacts/*.zip artifacts/*.md5 \
+          gh release create "$tag" "${files[@]}" \
             --title "OrangeFox R12.0_1 (${tag}) - Xiaomi Mi MIX 2S (polaris)" \
             --notes "OrangeFox Recovery R12.0_1 (Unofficial) for Xiaomi Mi MIX 2S (polaris)
 
