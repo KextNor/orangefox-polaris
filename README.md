@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **刷入之前，请务必先阅读下方的「刷入与测试」教程。**
+>
+> **维护者：ZiLing_Fox** —— 遇到任何问题千万要提 [Issue](https://github.com/KextNor/orangefox-polaris/issues/new?template=bug_report.yml) 告诉开发者，不然就没法修 bug 了 xwx
+
 # OrangeFox Recovery R12 for Xiaomi Mi MIX 2S (polaris)
 
 非官方（Unofficial）的 OrangeFox Recovery R12 构建，设备树 + GitHub Actions 自动编译。
@@ -5,8 +10,6 @@
 - 源码基线：OrangeFox `fox_12.1`（`FOX_INTERNAL_RELEASE = R12.0`）
 - 版本号：`R12.0_1`
 - 维护者：ZiLing_Fox
-
-> 有问题千万要提 [Issue](https://github.com/KextNor/orangefox-polaris/issues/new/choose) 给开发者，不然没法修 bug 了 xwx
 
 ---
 
