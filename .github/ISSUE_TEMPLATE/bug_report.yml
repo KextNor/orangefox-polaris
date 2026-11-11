@@ -82,7 +82,7 @@ body:
       description: flash.log / recovery.log / dmesg.txt / getprop.txt
       placeholder: 把日志文件拖进这个输入框
     validations:
-      required: false
+      required: true
 
   - type: checkboxes
     id: checklist
@@ -90,6 +90,6 @@ body:
       label: 确认项
       options:
         - label: 我已附上至少一份日志（flash.log 或 recovery.log）
-          required: false
+          required: true
         - label: 我保留了一份官方 R11.1 的包作为回退
-          required: false
+          required: true
