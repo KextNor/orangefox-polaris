@@ -1,0 +1,95 @@
+name: 刷机 / 使用问题反馈
+description: 报告 OrangeFox R12 (polaris) 的刷入失败、启动异常、功能问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量把日志一起附上，否则很难定位问题。
+
+        **日志收集方法：**
+        - fastboot 阶段：`fastboot flash recovery xxx.img > flash.log 2>&1`（PowerShell 用 `*>`）
+        - Recovery 内：`/sdcard/Fox/logs/`（`recovery.log`、`last_log`、`dmesg`）
+        - adb：`adb pull /tmp/recovery.log`、`adb shell dmesg > dmesg.txt`、`adb shell getprop > getprop.txt`
+
+  - type: input
+    id: version
+    attributes:
+      label: 使用的版本
+      description: Release 标签或文件名，例如 Fix1-v12.0_1-polaris
+      placeholder: Fix1-v12.0_1-polaris
+    validations:
+      required: true
+
+  - type: input
+    id: rom
+    attributes:
+      label: 当前手机系统
+      description: ROM 名称与 Android 版本
+      placeholder: LineageOS 22.2 (Android 15)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: flash_method
+    attributes:
+      label: 刷入方式
+      options:
+        - fastboot flash recovery
+        - Recovery 内刷 zip
+        - fastboot boot 临时启动
+        - 其他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: unlocked
+    attributes:
+      label: bootloader 是否已解锁
+      description: fastboot getvar unlocked 的结果
+      options:
+        - "yes"
+        - "no"
+        - 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象描述
+      description: 具体发生了什么，卡在哪一步，屏幕上显示什么
+      placeholder: 例如：fastboot 卡在 sending 'recovery'，超过 5 分钟无响应
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 手机进入 fastboot
+        2. 执行 fastboot flash recovery xxx.img
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志（直接拖文件到这里，或粘贴关键内容）
+      description: flash.log / recovery.log / dmesg.txt / getprop.txt
+      placeholder: 把日志文件拖进这个输入框
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 确认项
+      options:
+        - label: 我已附上至少一份日志（flash.log 或 recovery.log）
+          required: false
+        - label: 我保留了一份官方 R11.1 的包作为回退
+          required: false
