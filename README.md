@@ -6,6 +6,8 @@
 - 版本号：`R12.0_1`
 - 维护者：ZiLing_Fox
 
+> 有问题千万要提 [Issue](https://github.com/KextNor/orangefox-polaris/issues/new/choose) 给开发者，不然没法修 bug 了 xwx
+
 ---
 
 ## 一、刷入与测试（先看这里）
