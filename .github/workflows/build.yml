@@ -413,7 +413,7 @@ jobs:
                 print; next
               }
               { print }
-            ' "$FSTAB.bak" > "$FSTAB.tmp" && mv "$FSTAB.tmp" "$FSTAB"
+            ' "$FSTAB" > "$FSTAB.tmp" && mv "$FSTAB.tmp" "$FSTAB"
           done
 
           echo "=== Patched fstab (dynamic partitions with wipeingui) ==="
