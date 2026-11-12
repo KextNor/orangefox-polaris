@@ -152,24 +152,59 @@ jobs:
             grep -B1 -A6 "R12 interface refresh" "$f"
           done
 
-      # ============================================================
-      # DO NOT patch recovery-dynamic.fstab with 'formattable'!
-      #
-      # polaris uses RETROFIT dynamic partitions (BOARD_SUPER_PARTITION_BLOCK_DEVICES
-      # := system vendor cust). The super metadata lives at the START of the
-      # physical 'system' partition (BOARD_SUPER_PARTITION_METADATA_DEVICE := system).
-      #
-      # Adding 'formattable' to system/vendor/etc makes OrangeFox treat them as
-      # ordinary physical partitions during wipe/format. mkfs.ext4 then writes
-      # directly to the physical partition, OVERWRITING the super metadata.
-      # On next boot, init reads the corrupted super metadata, fails to create
-      # the logical partitions (system/vendor/cust/...), first_stage_mount fails,
-      # and the device hangs on the OrangeFox splash screen (the "stuck on first
-      # screen" bug we saw in Fix4 and again after 5-wipe on Fix5).
-      #
-      # Dynamic partitions (especially retrofit) must NEVER be marked formattable
-      # in recovery fstab. The stock recovery-dynamic.fstab is correct as-is.
-      # ============================================================
+      - name: Patch fstab (add wipeingui to dynamic partitions)
+        run: |
+          set -e
+          FSTAB_DIR="device/xiaomi/sdm845-common/recovery/kernel_44/fstab_files"
+          FSTAB="$FSTAB_DIR/recovery-dynamic.fstab"
+          [ -f "$FSTAB" ] || FSTAB=$(find device/xiaomi/sdm845-common -name 'recovery-dynamic.fstab' | head -1)
+          [ -f "$FSTAB" ] || { echo "::error::recovery-dynamic.fstab not found"; exit 1; }
+          echo "Found: $FSTAB"
+          cp "$FSTAB" "$FSTAB.bak"
+
+          # Add 'wipeingui' to dynamic partitions so they show up in Wipe UI.
+          # CRITICAL: keep 'logical' flag! Do NOT add 'formattable'!
+          #
+          # polaris uses RETROFIT dynamic partitions. The super metadata lives at
+          # the START of the physical 'system' partition. If we remove 'logical'
+          # and add 'formattable', OrangeFox treats system/vendor as physical
+          # partitions and mkfs.ext4 writes directly to them, OVERWRITING super
+          # metadata -> device hangs on OrangeFox splash (Fix4/Fix5 bug).
+          #
+          # With 'logical' kept, OrangeFox uses /dev/block/mapper/system (dm device)
+          # for wipe/format. mkfs.ext4 on a dm device does NOT touch the physical
+          # partition's super metadata -> SAFE.
+          #
+          # R11 (fox_9.0_Q_SAR) had System/Vendor/Cust in Wipe UI because polaris
+          # was NOT dynamic-partitioned back then. R12 retrofit changed that.
+          # Adding 'wipeingui' restores the R11 Wipe UI experience safely.
+
+          for part in system system_ext product vendor odm; do
+            awk -v part="$part" '
+              /^[[:space:]]*#/ { print; next }
+              NF >= 5 && $1 == part && /logical/ {
+                $NF = $NF ",wipeingui"
+                print "  [wipeingui] " part > "/dev/stderr"
+                print; next
+              }
+              { print }
+            ' "$FSTAB.bak" > "$FSTAB.tmp" && mv "$FSTAB.tmp" "$FSTAB"
+          done
+
+          echo "=== Patched fstab (dynamic partitions with wipeingui) ==="
+          grep -E '^(system|system_ext|product|vendor|odm)' "$FSTAB" || true
+
+          BAD=0
+          for part in system system_ext product vendor odm; do
+            LINE=$(grep -E "^$part[[:space:]]" "$FSTAB" || true)
+            if [ -n "$LINE" ]; then
+              echo "$LINE" | grep -q 'logical' || { echo "::error::$part missing logical!"; BAD=1; }
+              echo "$LINE" | grep -q 'wipeingui' || { echo "::error::$part missing wipeingui!"; BAD=1; }
+              echo "$LINE" | grep -q 'formattable' && { echo "::error::$part has formattable (DANGEROUS)!"; BAD=1; }
+            fi
+          done
+          [ "$BAD" -eq 0 ] || { echo "::error::fstab patch validation failed"; exit 1; }
+          echo "fstab patch OK: all dynamic partitions have logical+wipeingui, no formattable"
 
       - name: Build OrangeFox Recovery
         run: |
