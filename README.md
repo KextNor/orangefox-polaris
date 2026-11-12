@@ -58,7 +58,35 @@ fastboot boot OrangeFox-R12.0_1-Unofficial-polaris.img
 
 关机状态下按住 **电源键 + 音量上键**，出现小米 Logo 后松开。
 
-### 7. 常见问题
+### 7. 常用快捷键
+
+| 功能 | 快捷键 | 备注 |
+|------|--------|------|
+| 截屏 | 尝试 **音量下 + 电源键** 或 **音量上 + 电源键** | 文件存 `/sdcard/Fox/Screenshots/`；也可在 **设置 → 自定义** 里确认/修改 |
+| 强制重启 | 长按电源键 10 秒 | |
+| 退出 Recovery | **重启 → 系统** | |
+
+### 8. 时区设置
+
+本构建通过 `OF_DEFAULT_TIMEZONE` 默认设为 **Asia/Shanghai (CST, UTC+8)**，进入 Recovery 后时间应该就是准的。
+
+如果你需要手动改：
+
+→ **设置 → 通用 → 时间 → 选择时区**
+
+> **注意：** OrangeFox 内置时区列表里没有直接的 China/Shanghai 选项。列表里的 `TAIST-8`（台湾时间）也是 UTC+8，但带夏令时。如果不想要夏令时，用 `OF_DEFAULT_TIMEZONE="CST-8"`（POSIX 格式，无夏令时）是最干净的做法。
+
+### 9. Magisk 功能
+
+本 Recovery 内置 OrangeFox 的 **Advanced → Magisk** 功能，不需要额外刷包：
+
+- **Patch Boot image**：把 ROM 的 boot.img 打上 Magisk 补丁，生成 `magisk_patched-*.img`，然后 fastboot 刷入。
+- **Direct install**：直接给当前 boot 分区打补丁（需要已 root）。
+- **Uninstall Magisk**：仅卸载 Magisk 管理的模块和镜像，不会破坏系统。
+
+> 如果刷了 Magisk 之后系统起不来，在 Recovery 里 → **高级 → Magisk → Uninstall** 或直接手动备份的 boot.img 刷回去即可。
+
+### 10. 常见问题
 
 | 现象 | 说明 / 处理 |
 |------|-------------|
