@@ -72,6 +72,15 @@ if [ "$1" = "$FDEVICE" -o "$FOX_BUILD_DEVICE" = "$FDEVICE" ]; then
 	# 格式参考 gui/theme/*/pages/settings.xml 的 <listitem> 示例。
 	export OF_DEFAULT_TIMEZONE="CST-8"
 	# --- End Default UI Customization ---
+
+	# --- Fox Addons（ZIP 安装器内置补丁）---
+	# OF_ENABLE_FRP_ADDON=1：在 OrangeFox ZIP 里加入一个擦除 FRP 分区的补丁。
+	# polaris 有独立 frp 分区（约 1.5 MB），所以这个 addon 对它有效。
+	# 注意：这是 EXPERIMENTAL 功能，且只在「刷 ROM / 刷 OrangeFox ZIP」流程中出现
+	# （Fox Addons 页面），不是 Recovery 运行时的 UI 插件中心。
+	# 如果后续发现有副作用，可以把这行改成 0 或删掉。
+	export OF_ENABLE_FRP_ADDON=1
+	# --- End Fox Addons ---
 else
 	if [ -z "$FOX_BUILD_DEVICE" -a -z "$BASH_SOURCE" ]; then
 		echo "I: This script requires bash. Not processing the $FDEVICE $(basename $0)"
