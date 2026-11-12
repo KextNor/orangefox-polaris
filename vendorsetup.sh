@@ -53,6 +53,22 @@ if [ "$1" = "$FDEVICE" -o "$FOX_BUILD_DEVICE" = "$FDEVICE" ]; then
 	# pull in the common vendorsetup.sh
 	source device/xiaomi/sdm845-common/vendorsetupcommon.sh
 
+	# --- Override common tree defaults ---
+	# Common 树目前有两个对 polaris 不适用的默认值，必须覆盖掉：
+	#
+	# 1) FOX_VANILLA_BUILD=1  → 取消，让所有 Fox Addons 启用
+	#    vanilla build = 不带 MIUI 特有功能（包括 Fox Addons 里的 Magisk、MIUI OTA、
+	#    FRP 擦除等补丁）。但 polaris 本身就是小米 MIUI 设备，不需要精简版。
+	#    common 树里这个值是为 PE/Pixel Experience 这类非 MIUI ROM 加的，
+	#    不适合 polaris。
+	unset FOX_VANILLA_BUILD
+
+	# 2) FOX_USE_SPECIFIC_MAGISK_ZIP=~/Magisk/Magisk-v30.7.zip → 删除这个硬编码路径
+	#    CI 环境里这个路径不存在，Magisk addon 因此打不进去。
+	#    unset 后 OrangeFox 会用源码内置的默认 Magisk 版本（随 OrangeFox 更新）。
+	unset FOX_USE_SPECIFIC_MAGISK_ZIP
+	# --- End Override ---
+
 	# --- Maintainer Info ---
 	export OF_MAINTAINER="ZiLing_Fox"
 	export FOX_MAINTAINER_PATCH_VERSION="3"
