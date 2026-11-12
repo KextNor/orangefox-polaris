@@ -64,6 +64,14 @@ if [ "$1" = "$FDEVICE" -o "$FOX_BUILD_DEVICE" = "$FDEVICE" ]; then
 	# decryption (and therefore the app manager).
 	export FOX_USE_KEYMASTER_4=1
 	# --- End Device Fixes ---
+
+	# --- Default UI Customization ---
+	# 默认时区：Asia/Shanghai（东八区，无夏令时）。
+	# POSIX 格式里东八区写 CST-8（注意符号是反的：GMT+8 → offset=-8）。
+	# OrangeFox 原默认值是 CET-1;CEST,...（中欧），对中国用户显示时间极不准。
+	# 格式参考 gui/theme/*/pages/settings.xml 的 <listitem> 示例。
+	export OF_DEFAULT_TIMEZONE="CST-8"
+	# --- End Default UI Customization ---
 else
 	if [ -z "$FOX_BUILD_DEVICE" -a -z "$BASH_SOURCE" ]; then
 		echo "I: This script requires bash. Not processing the $FDEVICE $(basename $0)"
