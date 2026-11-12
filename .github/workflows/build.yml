@@ -534,10 +534,14 @@ jobs:
           source build/envsetup.sh
           echo "=== envsetup.sh done, exit: $? ==="
           echo "=== Running lunch ==="
-          lunch twrp_polaris-eng
-          echo "=== lunch done, exit: $? ==="
+          lunch twrp_polaris-bp2a-eng
+          LUNCH_EXIT=$?
+          echo "=== lunch done, exit: $LUNCH_EXIT ==="
+          if [ "$LUNCH_EXIT" -ne 0 ]; then
+            exit "$LUNCH_EXIT"
+          fi
           echo "=== Starting build ==="
-          mka adbd recoveryimage 2>&1 | tee build.log
+          mka recoveryimage 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           echo "=== Build exit code: $BUILD_EXIT ==="
           echo "=== Disk space after build ==="
