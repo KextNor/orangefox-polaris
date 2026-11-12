@@ -155,226 +155,317 @@ jobs:
             grep -B1 -A6 "R12 interface refresh" "$f"
           done
 
-      - name: Patch OrangeFox source (physical super, writable dm, wipe)
+      - name: Patch OrangeFox source (physical super, writable dm, wipe, refresh)
         run: |
           set -e
-          cd $HOME/fox_12.1
+          cd $HOME/fox_12.1/bootable/recovery
           echo "=== Patching OrangeFox dynamic partition handling ==="
-          
-          # Patch 1: partitionmanager.cpp Get_Super_Partition()
-          PM_FILE="bootable/recovery/partitionmanager.cpp"
-          [ -f "$PM_FILE" ] || { echo "::error::partitionmanager.cpp not found"; exit 1; }
-          cp "$PM_FILE" "$PM_FILE.bak"
-          echo "=== Patch 1: Get_Super_Partition() ==="
-          python3 << 'PYEOF'
-          import re
-          with open("bootable/recovery/partitionmanager.cpp", "r") as f:
-              content = f.read()
-          old_func = '''std::string TWPartitionManager::Get_Super_Partition() {
-          	int slot_number = Get_Active_Slot_Display() == "A" ? 0 : 1;
-          	std::string super_device = fs_mgr_get_super_partition_name(slot_number);
-          	return "/dev/block/by-name/" + super_device;
-          }'''
-          new_func = '''std::string TWPartitionManager::Get_Super_Partition() {
-          	static std::string physical_super;
-          	if (!physical_super.empty())
-          		return physical_super;
-
-          	int slot_number = Get_Active_Slot_Display() == "A" ? 0 : 1;
-          	std::string super_device = fs_mgr_get_super_partition_name(slot_number);
-          	std::vector<std::string> candidates;
-          	std::string boot_devices = android::base::GetProperty("ro.boot.boot_devices", "");
-          	for (const auto& boot_device : android::base::Split(boot_devices, ",")) {
-          		if (!boot_device.empty())
-          			candidates.push_back("/dev/block/platform/" + boot_device + "/by-name/" + super_device);
-          	}
-          	candidates.push_back("/dev/block/bootdevice/by-name/" + super_device);
-          	candidates.push_back("/dev/block/by-name/" + super_device);
-
-          	for (const auto& candidate : candidates) {
-          		std::string resolved;
-          		if (!android::base::Realpath(candidate, &resolved))
-          			continue;
-          		if (resolved.find("/dm-") != std::string::npos) {
-          			LOGINFO("Ignoring logical device %s while resolving physical super\n", resolved.c_str());
-          			continue;
-          		}
-          		physical_super = resolved;
-          		if (property_set("twrp.super.device", physical_super.c_str()) != 0)
-          			LOGERR("Unable to export the physical super device to updater\n");
-          		LOGINFO("Physical super partition: %s -> %s\n", candidate.c_str(), physical_super.c_str());
-          		return physical_super;
-          	}
-
-          	LOGERR("Unable to resolve physical super; falling back to %s\n", candidates.back().c_str());
-          	return candidates.back();
-          }'''
-          if old_func in content:
-              content = content.replace(old_func, new_func)
-              with open("bootable/recovery/partitionmanager.cpp", "w") as f:
-                  f.write(content)
-              print("PATCHED: Get_Super_Partition()")
-          else:
-              if "bootdevice_path" in content:
-                  print("Already patched!")
-              else:
-                  print("ERROR: pattern not found")
-                  exit(1)
-          PYEOF
-          
-          # Patch 2: updater_runtime_dynamic_partitions.cpp GetSuperDevice()
-          UPDATER_FILE="bootable/recovery/updater/updater_runtime_dynamic_partitions.cpp"
-          [ -f "$UPDATER_FILE" ] || { echo "::error::updater_runtime_dynamic_partitions.cpp not found"; exit 1; }
-          cp "$UPDATER_FILE" "$UPDATER_FILE.bak"
-          echo "=== Patch 2: GetSuperDevice() ==="
-          python3 << 'PYEOF'
-          path = "bootable/recovery/updater/updater_runtime_dynamic_partitions.cpp"
-          with open(path, "r") as f:
-              content = f.read()
-          old_func = '''static std::string GetSuperDevice() {
-            return "/dev/block/by-name/" + fs_mgr_get_super_partition_name();
-          }'''
-          new_func = '''static std::string GetSuperDevice() {
-            std::string cached_device = android::base::GetProperty("twrp.super.device", "");
-            if (!cached_device.empty()) {
-              LOG(INFO) << "Using physical super device cached by recovery: " << cached_device;
-              return cached_device;
-            }
-
-            std::string super_device = fs_mgr_get_super_partition_name();
-            std::vector<std::string> candidates;
-            std::string boot_devices = android::base::GetProperty("ro.boot.boot_devices", "");
-            for (const auto& boot_device : android::base::Split(boot_devices, ",")) {
-              if (!boot_device.empty()) {
-                candidates.push_back("/dev/block/platform/" + boot_device + "/by-name/" + super_device);
-              }
-            }
-            candidates.push_back("/dev/block/bootdevice/by-name/" + super_device);
-            candidates.push_back("/dev/block/by-name/" + super_device);
-
-            for (const auto& candidate : candidates) {
-              std::string resolved;
-              if (!android::base::Realpath(candidate, &resolved)) continue;
-              if (resolved.find("/dm-") != std::string::npos) {
-                LOG(INFO) << "Ignoring logical device while resolving physical super: " << resolved;
-                continue;
-              }
-              LOG(INFO) << "Resolved physical super device: " << candidate << " -> " << resolved;
-              return resolved;
-            }
-
-            LOG(ERROR) << "Unable to resolve physical super; falling back to " << candidates.back();
-            return candidates.back();
-          }'''
-          if old_func in content:
-              content = content.replace(old_func, new_func)
-              print("PATCHED: GetSuperDevice()")
-          elif new_func in content:
-              print("GetSuperDevice() already patched")
-          else:
-              print("ERROR: GetSuperDevice() pattern not found")
-              exit(1)
-
-          # Realpath() and Android properties are used by the physical-super resolver.
-          if "#include <android-base/file.h>" not in content:
-              anchor = "#include <android-base/logging.h>\n"
-              if anchor not in content:
-                  print("ERROR: logging include anchor not found")
-                  exit(1)
-              content = content.replace(anchor, "#include <android-base/file.h>\n" + anchor, 1)
-              print("PATCHED: added <android-base/file.h>")
-          if "#include <android-base/properties.h>" not in content:
-              anchor = "#include <android-base/parseint.h>\n"
-              if anchor not in content:
-                  print("ERROR: parseint include anchor not found")
-                  exit(1)
-              content = content.replace(anchor, anchor + "#include <android-base/properties.h>\n", 1)
-              print("PATCHED: added <android-base/properties.h>")
-
-          with open(path, "w") as f:
-              f.write(content)
-          PYEOF
-
-          # Patch 3: Prepare_Super_Volume() must not erase an explicit wipeingui flag.
-          # Set_Can_Be_Wiped(false) also clears Wipe_Available_in_GUI, which used to
-          # undo the fstab patch. Preserve the value requested by each fstab entry.
-          echo "=== Patch 3: preserve logical-partition wipeingui ==="
-          python3 << 'PYEOF'
-          path = "bootable/recovery/partitionmanager.cpp"
-          with open(path, "r") as f:
-              content = f.read()
-          old_line = "twrpPart->Set_Can_Be_Wiped(false);"
-          new_line = "twrpPart->Set_Can_Be_Wiped(twrpPart->Wipe_Available_in_GUI);"
-          if old_line in content:
-              if content.count(old_line) != 1:
-                  print("ERROR: unexpected Set_Can_Be_Wiped(false) count")
-                  exit(1)
-              content = content.replace(old_line, new_line)
-              with open(path, "w") as f:
-                  f.write(content)
-              print("PATCHED: preserve explicit wipeingui")
-          elif new_line in content:
-              print("wipeingui preservation already patched")
-          else:
-              print("ERROR: Prepare_Super_Volume() wipe pattern not found")
-              exit(1)
-          PYEOF
-
-          # Patch 4: recovery must create writable dm devices. The fs_mgr helper
-          # defaults force_writable to false, while updater reuses ACTIVE devices.
-          # A read-only boot-time mapping therefore breaks both flashing and wipe.
-          echo "=== Patch 4: create writable logical partitions at recovery startup ==="
-          python3 << 'PYEOF'
-          path = "bootable/recovery/partitionmanager.cpp"
-          with open(path, "r") as f:
-              content = f.read()
-          old_func = '''void TWPartitionManager::Setup_Super_Devices() {
-          	std::string superPart = Get_Super_Partition();
-          	android::fs_mgr::CreateLogicalPartitions(superPart);
-          }'''
-          new_func = '''void TWPartitionManager::Setup_Super_Devices() {
-          	std::string superPart = Get_Super_Partition();
-          	auto metadata = android::fs_mgr::ReadCurrentMetadata(superPart);
-          	if (!metadata) {
-          		LOGERR("Unable to read dynamic partition metadata from %s\n", superPart.c_str());
-          		return;
-          	}
-
-          	for (const auto& partition : metadata->partitions) {
-          		if (!partition.num_extents || (partition.attributes & LP_PARTITION_ATTR_DISABLED))
-          			continue;
-
-          		android::fs_mgr::CreateLogicalPartitionParams params = {
-          			.block_device = superPart,
-          			.metadata = metadata.get(),
-          			.partition = &partition,
-          			.force_writable = true,
-          		};
-          		std::string path;
-          		if (!android::fs_mgr::CreateLogicalPartition(params, &path))
-          			LOGERR("Unable to create a writable logical partition from super\n");
-          	}
-          }'''
-          if old_func in content:
-              content = content.replace(old_func, new_func, 1)
-              with open(path, "w") as f:
-                  f.write(content)
-              print("PATCHED: writable recovery dm devices")
-          elif new_func in content:
-              print("writable recovery dm devices already patched")
-          else:
-              print("ERROR: Setup_Super_Devices() pattern not found")
-              exit(1)
-          PYEOF
-
-          echo "=== Verify patches ==="
-          grep -A12 "Get_Super_Partition()" "$PM_FILE" | head -15
-          echo "---"
-          grep -A12 "GetSuperDevice()" "$UPDATER_FILE" | head -15
-          echo "---"
-          grep -n "Set_Can_Be_Wiped" "$PM_FILE" | tail -3
-          grep -A25 "Setup_Super_Devices()" "$PM_FILE" | head -28
-          grep -n "android-base/file.h\|android-base/properties.h" "$UPDATER_FILE"
+          PATCH_FILE="$RUNNER_TEMP/polaris-dynamic-partitions.patch"
+          cat > "$PATCH_FILE" << 'POLARIS_PATCH'
+          diff --git a/partitionmanager.cpp b/partitionmanager.cpp
+          index b52a7d4..f7a3ffd 100755
+          --- a/partitionmanager.cpp
+          +++ b/partitionmanager.cpp
+          @@ -4639,7 +4639,8 @@ bool TWPartitionManager::Prepare_Super_Volume(TWPartition* twrpPart) {
+               Fstab fstab;
+           	std::string bare_partition_name = Get_Bare_Partition_Name(twrpPart->Get_Mount_Point());
+           
+          -	Super_Partition_List.push_back(bare_partition_name);
+          +	if (std::find(Super_Partition_List.begin(), Super_Partition_List.end(), bare_partition_name) == Super_Partition_List.end())
+          +		Super_Partition_List.push_back(bare_partition_name);
+           	LOGINFO("Trying to prepare %s from super partition\n", bare_partition_name.c_str());
+           
+           	std::string blk_device_partition;
+          @@ -4662,14 +4663,17 @@ bool TWPartitionManager::Prepare_Super_Volume(TWPartition* twrpPart) {
+                   return false;
+               }
+           
+          -	while (access(fstabEntry.blk_device.c_str(), F_OK) != 0) {
+          +	for (int retry = 0; retry < 10000 && access(fstabEntry.blk_device.c_str(), F_OK) != 0; retry++)
+           		usleep(100);
+          +	if (access(fstabEntry.blk_device.c_str(), F_OK) != 0) {
+          +		LOGERR("Timed out waiting for logical partition device: %s\n", fstabEntry.blk_device.c_str());
+          +		return false;
+           	}
+           
+           	twrpPart->Set_Block_Device(fstabEntry.blk_device);
+           	twrpPart->Update_Size(true);
+           	twrpPart->Set_Can_Be_Backed_Up(false);
+          -	twrpPart->Set_Can_Be_Wiped(false);
+          +	twrpPart->Set_Can_Be_Wiped(twrpPart->Wipe_Available_in_GUI);
+           
+           	TWFunc::Mapper_to_BootDevice(fstabEntry.blk_device, bare_partition_name);
+           	property_set("twrp.super.symlinks_created", "true");
+          @@ -4679,30 +4683,91 @@ bool TWPartitionManager::Prepare_Super_Volume(TWPartition* twrpPart) {
+           
+           bool TWPartitionManager::Prepare_All_Super_Volumes() {
+           	bool status = true;
+          -	std::vector<TWPartition*>::iterator iter;
+           
+          -	for (iter = Partitions.begin(); iter != Partitions.end(); iter++) {
+          -		if ((*iter)->Is_Super) {
+          -			if (!Prepare_Super_Volume(*iter)) {
+          -				status = false;
+          -				Partitions.erase(iter--);
+          -			}
+          -			PartitionManager.Output_Partition(*iter);
+          +	for (auto iter = Partitions.begin(); iter != Partitions.end();) {
+          +		TWPartition* part = *iter;
+          +		if (!part->Is_Super) {
+          +			++iter;
+          +			continue;
+          +		}
+          +		if (!Prepare_Super_Volume(part)) {
+          +			status = false;
+          +			++iter;
+          +			continue;
+           		}
+          +		PartitionManager.Output_Partition(part);
+          +		++iter;
+           	}
+           	Update_System_Details();
+           	return status;
+           }
+           
+           std::string TWPartitionManager::Get_Super_Partition() {
+          +	static std::string physical_super;
+          +	if (!physical_super.empty())
+          +		return physical_super;
+          +
+           	int slot_number = Get_Active_Slot_Display() == "A" ? 0 : 1;
+           	std::string super_device = fs_mgr_get_super_partition_name(slot_number);
+          -	return "/dev/block/by-name/" + super_device;
+          +	std::vector<std::string> candidates;
+          +	std::string boot_devices = android::base::GetProperty("ro.boot.boot_devices", "");
+          +	for (const auto& boot_device : android::base::Split(boot_devices, ",")) {
+          +		if (!boot_device.empty())
+          +			candidates.push_back("/dev/block/platform/" + boot_device + "/by-name/" + super_device);
+          +	}
+          +	candidates.push_back("/dev/block/bootdevice/by-name/" + super_device);
+          +	candidates.push_back("/dev/block/by-name/" + super_device);
+          +
+          +	for (const auto& candidate : candidates) {
+          +		std::string resolved;
+          +		if (!android::base::Realpath(candidate, &resolved))
+          +			continue;
+          +		if (resolved.find("/dm-") != std::string::npos) {
+          +			LOGINFO("Ignoring logical device %s while resolving physical super\n", resolved.c_str());
+          +			continue;
+          +		}
+          +		physical_super = resolved;
+          +		if (property_set("twrp.super.device", physical_super.c_str()) != 0)
+          +			LOGERR("Unable to export the physical super device to updater\n");
+          +		LOGINFO("Physical super partition: %s -> %s\n", candidate.c_str(), physical_super.c_str());
+          +		return physical_super;
+          +	}
+          +
+          +	LOGERR("Unable to resolve physical super; refusing to use a logical or missing device\n");
+          +	return "";
+           }
+           
+          -void TWPartitionManager::Setup_Super_Devices() {
+          +void TWPartitionManager::Setup_Super_Devices(bool only_missing) {
+           	std::string superPart = Get_Super_Partition();
+          -	android::fs_mgr::CreateLogicalPartitions(superPart);
+          +	auto metadata = android::fs_mgr::ReadCurrentMetadata(superPart);
+          +	if (!metadata) {
+          +		LOGERR("Unable to read dynamic partition metadata from %s\n", superPart.c_str());
+          +		return;
+          +	}
+          +
+          +	for (const auto& partition : metadata->partitions) {
+          +		if (!partition.num_extents || (partition.attributes & LP_PARTITION_ATTR_DISABLED))
+          +			continue;
+          +
+          +		if (only_missing) {
+          +			FstabEntry existing = {
+          +				.blk_device = partition.name,
+          +				.fs_mgr_flags.logical = true,
+          +			};
+          +			if (fs_mgr_update_logical_partition(&existing))
+          +				continue;
+          +		}
+          +
+          +		android::fs_mgr::CreateLogicalPartitionParams params = {
+          +			.block_device = superPart,
+          +			.metadata = metadata.get(),
+          +			.partition = &partition,
+          +			.force_writable = true,
+          +		};
+          +		std::string path;
+          +		if (!android::fs_mgr::CreateLogicalPartition(params, &path))
+          +			LOGERR("Unable to create a writable logical partition from super\n");
+          +	}
+           }
+           
+           void TWPartitionManager::Setup_Super_Partition() {
+          diff --git a/partitions.hpp b/partitions.hpp
+          index ea1f80b..008953a 100644
+          --- a/partitions.hpp
+          +++ b/partitions.hpp
+          @@ -368,7 +368,7 @@ public:
+              
+                	bool Prepare_Super_Volume(TWPartition* twrpPart);				  // Prepare logical super partition volume for mounting
+           	std::string Get_Super_Partition();					  // Get Super Partition block device path
+          -	void Setup_Super_Devices();						  // Setup logical dm devices on super partition
+          +	void Setup_Super_Devices(bool only_missing = false);			  // Setup logical dm devices on super partition
+           	bool Get_Super_Status();						  // Return whether device has a super partition
+           	void Setup_Super_Partition();						  // Setup the super partition for backup and restore
+           	bool Recreate_Logs_Dir();                                                 // Recreate TWRP_AB_LOGS_DIR after wipe
+          diff --git a/twrp-functions.cpp b/twrp-functions.cpp
+          index 0a8605a..74fabf9 100755
+          --- a/twrp-functions.cpp
+          +++ b/twrp-functions.cpp
+          @@ -4990,11 +4990,42 @@ bool TWFunc::Has_Virtual_AB_Partitions(void) {
+           }
+           
+           void TWFunc::Mapper_to_BootDevice(const std::string block_device, const std::string partition_name) {
+          -	LOGINFO("Symlinking %s => /dev/block/bootdevice/by-name/%s \n", block_device.c_str(), partition_name.c_str());
+          -	symlink(block_device.c_str(), ("/dev/block/bootdevice/by-name/" + partition_name).c_str());
+          +	auto update_link = [&](const std::string& path) {
+          +		struct stat st;
+          +		if (lstat(path.c_str(), &st) == 0) {
+          +			if (!S_ISLNK(st.st_mode)) {
+          +				LOGINFO("Preserving non-symlink block device: %s\n", path.c_str());
+          +				return;
+          +			}
+          +
+          +			char target[512];
+          +			ssize_t length = readlink(path.c_str(), target, sizeof(target) - 1);
+          +			if (length < 0) {
+          +				LOGERR("Unable to read existing symlink %s: %s\n", path.c_str(), strerror(errno));
+          +				return;
+          +			}
+          +			std::string current_target(target, length);
+          +			if (current_target.compare(0, 3, "dm-") != 0 && current_target.find("/dm-") == std::string::npos) {
+          +				LOGINFO("Preserving physical partition symlink: %s -> %s\n", path.c_str(), current_target.c_str());
+          +				return;
+          +			}
+          +			if (unlink(path.c_str()) != 0) {
+          +				LOGERR("Unable to replace stale logical symlink %s: %s\n", path.c_str(), strerror(errno));
+          +				return;
+          +			}
+          +		} else if (errno != ENOENT) {
+          +			LOGERR("Unable to inspect symlink %s: %s\n", path.c_str(), strerror(errno));
+          +			return;
+          +		}
+          +
+          +		if (symlink(block_device.c_str(), path.c_str()) != 0)
+          +			LOGERR("Unable to symlink %s => %s: %s\n", block_device.c_str(), path.c_str(), strerror(errno));
+          +		else
+          +			LOGINFO("Symlinked %s => %s\n", block_device.c_str(), path.c_str());
+          +	};
+           
+          -	LOGINFO("Symlinking %s => /dev/block/by-name/%s \n", block_device.c_str(), partition_name.c_str());
+          -	symlink(block_device.c_str(), ("/dev/block/by-name/" + partition_name).c_str());
+          +	update_link("/dev/block/bootdevice/by-name/" + partition_name);
+          +	update_link("/dev/block/by-name/" + partition_name);
+           }
+           
+           void TWFunc::PostWipeEncryption(void) {
+          diff --git a/twrpinstall/twinstall.cpp b/twrpinstall/twinstall.cpp
+          index 3691a2f..3893e5f 100755
+          --- a/twrpinstall/twinstall.cpp
+          +++ b/twrpinstall/twinstall.cpp
+          @@ -421,6 +421,13 @@ int TWinstall_zip(const char *path, int *wipe_cache, bool check_for_digest)
+           
+           				ret_val = Run_Update_Binary(path, wipe_cache, UPDATE_BINARY_ZIP_TYPE);
+           
+          +				if (ret_val == INSTALL_SUCCESS && PartitionManager.Get_Super_Status()) {
+          +					LOGINFO("Refreshing logical partitions after update-binary\n");
+          +					PartitionManager.Setup_Super_Devices(true);
+          +					if (!PartitionManager.Prepare_All_Super_Volumes())
+          +						LOGERR("Unable to refresh all logical partitions after update-binary\n");
+          +				}
+          +
+           				if (DataManager::GetIntValue("fox_processing_asserts") != 0) {
+           					TWFunc::Fox_Property_Set("ro.product.device", DataManager::GetStrValue("fox_product_device"));
+           					DataManager::SetValue("fox_processing_asserts", "0");
+          diff --git a/updater/updater_runtime_dynamic_partitions.cpp b/updater/updater_runtime_dynamic_partitions.cpp
+          index 6570cff..2f66619 100644
+          --- a/updater/updater_runtime_dynamic_partitions.cpp
+          +++ b/updater/updater_runtime_dynamic_partitions.cpp
+          @@ -24,8 +24,10 @@
+           #include <type_traits>
+           #include <vector>
+           
+          +#include <android-base/file.h>
+           #include <android-base/logging.h>
+           #include <android-base/parseint.h>
+          +#include <android-base/properties.h>
+           #include <android-base/strings.h>
+           #include <fs_mgr.h>
+           #include <fs_mgr_dm_linear.h>
+          @@ -46,7 +48,36 @@ using android::fs_mgr::SlotNumberForSlotSuffix;
+           static constexpr std::chrono::milliseconds kMapTimeout{ 1000 };
+           
+           static std::string GetSuperDevice() {
+          -  return "/dev/block/by-name/" + fs_mgr_get_super_partition_name();
+          +  std::string cached_device = android::base::GetProperty("twrp.super.device", "");
+          +  if (!cached_device.empty()) {
+          +    LOG(INFO) << "Using physical super device cached by recovery: " << cached_device;
+          +    return cached_device;
+          +  }
+          +
+          +  std::string super_device = fs_mgr_get_super_partition_name();
+          +  std::vector<std::string> candidates;
+          +  std::string boot_devices = android::base::GetProperty("ro.boot.boot_devices", "");
+          +  for (const auto& boot_device : android::base::Split(boot_devices, ",")) {
+          +    if (!boot_device.empty()) {
+          +      candidates.push_back("/dev/block/platform/" + boot_device + "/by-name/" + super_device);
+          +    }
+          +  }
+          +  candidates.push_back("/dev/block/bootdevice/by-name/" + super_device);
+          +  candidates.push_back("/dev/block/by-name/" + super_device);
+          +
+          +  for (const auto& candidate : candidates) {
+          +    std::string resolved;
+          +    if (!android::base::Realpath(candidate, &resolved)) continue;
+          +    if (resolved.find("/dm-") != std::string::npos) {
+          +      LOG(INFO) << "Ignoring logical device while resolving physical super: " << resolved;
+          +      continue;
+          +    }
+          +    LOG(INFO) << "Resolved physical super device: " << candidate << " -> " << resolved;
+          +    return resolved;
+          +  }
+          +
+          +  LOG(ERROR) << "Unable to resolve physical super; refusing to use a logical or missing device";
+          +  return "";
+           }
+           
+           static std::string AddSlotSuffix(const std::string& partition_name) {
+          @@ -71,8 +102,13 @@ bool UpdaterRuntime::MapPartitionOnDeviceMapper(const std::string& partition_nam
+             auto partition_name_suffix = AddSlotSuffix(partition_name);
+             auto state = DeviceMapper::Instance().GetState(partition_name_suffix);
+             if (state == DmDeviceState::INVALID) {
+          +    std::string super_device = GetSuperDevice();
+          +    if (super_device.empty()) {
+          +      LOG(ERROR) << "Cannot map " << partition_name_suffix << " without a physical super device";
+          +      return false;
+          +    }
+               CreateLogicalPartitionParams params = {
+          -      .block_device = GetSuperDevice(),
+          +      .block_device = super_device,
+                 // If device supports A/B, apply non-A/B update to the partition at current slot. Otherwise,
+                 // SlotNumberForSlotSuffix("") returns 0.
+                 .metadata_slot = SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix()),
+          @@ -300,6 +336,10 @@ bool PerformOpRemoveAllGroups(const OpParameters& params) {
+           
+           bool UpdaterRuntime::UpdateDynamicPartitions(const std::string_view op_list_value) {
+             auto super_device = GetSuperDevice();
+          +  if (super_device.empty()) {
+          +    LOG(ERROR) << "Cannot update dynamic partitions without a physical super device";
+          +    return false;
+          +  }
+             auto builder = MetadataBuilder::New(PartitionOpener(), super_device, 0);
+             if (builder == nullptr) {
+               LOG(ERROR) << "Failed to load dynamic partition metadata.";
+          POLARIS_PATCH
+          git apply --check "$PATCH_FILE"
+          git apply "$PATCH_FILE"
+          git diff --check
+          git diff --stat
+          echo "=== OrangeFox source patch applied and verified ==="
 
       - name: Patch fstab (add wipeingui to dynamic partitions)
         run: |
