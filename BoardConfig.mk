@@ -19,8 +19,4 @@
 
 # Inherit from common sdm845 BoardConfig
 include device/xiaomi/sdm845-common/BoardConfigCommon.mk
-
-# polaris 的 5.99" IPS 面板物理上限就是 60Hz（2160x1080）。
-# common 树里的 120 与硬件不符，会让 GUI 按 8.3ms 计时但实际每帧 16.7ms。
-TW_FRAMERATE := 60
 #
