@@ -22,7 +22,7 @@ FDEVICE="polaris"
 fetch_sdm845_common_repo() {
 	local URL=https://gitlab.com/OrangeFox/device/sdm845-common.git;
 	local common=device/xiaomi/sdm845-common;
-	local branch=fox_12.1;
+	local branch=fox_16.0;
 
 	if [ ! -d $common ]; then
 		echo "Cloning $URL ... to $common";
