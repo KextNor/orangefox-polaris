@@ -158,6 +158,7 @@ jobs:
       - name: Patch OrangeFox source (physical super, writable dm, wipe)
         run: |
           set -e
+          cd $HOME/fox_12.1
           echo "=== Patching OrangeFox dynamic partition handling ==="
           
           # Patch 1: partitionmanager.cpp Get_Super_Partition()
@@ -378,6 +379,7 @@ jobs:
       - name: Patch fstab (add wipeingui to dynamic partitions)
         run: |
           set -e
+          cd $HOME/fox_12.1
           FSTAB_DIR="device/xiaomi/sdm845-common/recovery/kernel_44/fstab_files"
           FSTAB="$FSTAB_DIR/recovery-dynamic.fstab"
           [ -f "$FSTAB" ] || FSTAB=$(find device/xiaomi/sdm845-common -name 'recovery-dynamic.fstab' | head -1)
