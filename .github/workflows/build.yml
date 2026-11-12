@@ -156,51 +156,80 @@ jobs:
       - name: Patch OrangeFox source (fix dynamic partition detection for bootdevice path)
         run: |
           set -e
+          echo "=== Patching OrangeFox source for bootdevice path ==="
+          
+          # Patch 1: partitionmanager.cpp Get_Super_Partition()
           PM_FILE="bootable/recovery/partitionmanager.cpp"
           [ -f "$PM_FILE" ] || { echo "::error::partitionmanager.cpp not found"; exit 1; }
           cp "$PM_FILE" "$PM_FILE.bak"
-          echo "=== Patching Get_Super_Partition() to check bootdevice path ==="
-          # Original code returns "/dev/block/by-name/" + super_device
-          # But polaris uses "/dev/block/bootdevice/by-name/" (with 'bootdevice' subdirectory)
-          # Patch: check bootdevice path first, fallback to standard path
+          echo "=== Patch 1: Get_Super_Partition() ==="
           python3 << 'PYEOF'
           import re
           with open("bootable/recovery/partitionmanager.cpp", "r") as f:
               content = f.read()
-          
-          # Find Get_Super_Partition() function
           old_func = '''std::string TWPartitionManager::Get_Super_Partition() {
           	int slot_number = Get_Active_Slot_Display() == "A" ? 0 : 1;
           	std::string super_device = fs_mgr_get_super_partition_name(slot_number);
           	return "/dev/block/by-name/" + super_device;
           }'''
-          
           new_func = '''std::string TWPartitionManager::Get_Super_Partition() {
           	int slot_number = Get_Active_Slot_Display() == "A" ? 0 : 1;
           	std::string super_device = fs_mgr_get_super_partition_name(slot_number);
-          	// Fix for polaris and Xiaomi devices: check bootdevice path first
           	std::string bootdevice_path = "/dev/block/bootdevice/by-name/" + super_device;
           	if (access(bootdevice_path.c_str(), F_OK) == 0) {
           		return bootdevice_path;
           	}
           	return "/dev/block/by-name/" + super_device;
           }'''
-          
           if old_func in content:
               content = content.replace(old_func, new_func)
               with open("bootable/recovery/partitionmanager.cpp", "w") as f:
                   f.write(content)
-              print("PATCHED: Get_Super_Partition() now checks bootdevice path")
+              print("PATCHED: Get_Super_Partition()")
           else:
-              print("WARNING: Get_Super_Partition() pattern not found, checking if already patched...")
               if "bootdevice_path" in content:
                   print("Already patched!")
               else:
-                  print("ERROR: Could not find function to patch")
+                  print("ERROR: pattern not found")
                   exit(1)
           PYEOF
-          echo "=== Verify patch ==="
-          grep -A10 "Get_Super_Partition()" "$PM_FILE" | head -15
+          
+          # Patch 2: updater_runtime_dynamic_partitions.cpp GetSuperDevice()
+          UPDATER_FILE="bootable/recovery/updater/updater_runtime_dynamic_partitions.cpp"
+          [ -f "$UPDATER_FILE" ] || { echo "::error::updater_runtime_dynamic_partitions.cpp not found"; exit 1; }
+          cp "$UPDATER_FILE" "$UPDATER_FILE.bak"
+          echo "=== Patch 2: GetSuperDevice() ==="
+          python3 << 'PYEOF'
+          with open("bootable/recovery/updater/updater_runtime_dynamic_partitions.cpp", "r") as f:
+              content = f.read()
+          old_func = '''static std::string GetSuperDevice() {
+            return "/dev/block/by-name/" + fs_mgr_get_super_partition_name();
+          }'''
+          new_func = '''static std::string GetSuperDevice() {
+            std::string super_device = fs_mgr_get_super_partition_name();
+            std::string bootdevice_path = "/dev/block/bootdevice/by-name/" + super_device;
+            if (access(bootdevice_path.c_str(), F_OK) == 0) {
+              return bootdevice_path;
+            }
+            return "/dev/block/by-name/" + super_device;
+          }'''
+          if old_func in content:
+              content = content.replace(old_func, new_func)
+              with open("bootable/recovery/updater/updater_runtime_dynamic_partitions.cpp", "w") as f:
+                  f.write(content)
+              print("PATCHED: GetSuperDevice()")
+          else:
+              if "bootdevice_path" in content:
+                  print("Already patched!")
+              else:
+                  print("ERROR: pattern not found")
+                  exit(1)
+          PYEOF
+          
+          echo "=== Verify patches ==="
+          grep -A8 "Get_Super_Partition()" "$PM_FILE" | head -12
+          echo "---"
+          grep -A8 "GetSuperDevice()" "$UPDATER_FILE" | head -12
 
       - name: Patch fstab (add wipeingui to dynamic partitions)
         run: |
