@@ -99,9 +99,10 @@ jobs:
         run: |
           export PATH=$HOME/.bin:$PATH
           cd $HOME
-          # Use official OrangeFox sync script (optimized: SSH + shallow clone)
+          # Use official OrangeFox sync script (optimized: shallow clone + parallel)
+          # Note: removed --ssh flag (GitHub Actions doesn't have GitLab SSH key)
           git clone https://gitlab.com/OrangeFox/Misc.git $HOME/of-misc
-          bash $HOME/of-misc/orangefox_sync.sh --branch 12.1 --ssh --path $HOME/fox_12.1
+          bash $HOME/of-misc/orangefox_sync.sh --branch 12.1 --path $HOME/fox_12.1
           echo "=== Sync complete ==="
           df -h
 
