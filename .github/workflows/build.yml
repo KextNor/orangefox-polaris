@@ -278,16 +278,47 @@ jobs:
           n=$(gh release list --limit 200 --json tagName --jq '[.[] | select(.tagName | startswith("Fix"))] | length')
           n=$((n+1))
           tag="Fix${n}-v12.0_1-polaris"
+
+          # 本次更新：列出上一个 Release 到当前提交之间的改动
+          prev_tag=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)
+          changes=""
+          if [ -n "$prev_tag" ]; then
+            changes=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${prev_tag}...${GITHUB_SHA}" \
+              --jq '.commits[] | "- " + (.commit.message | split("\n")[0]) + " (" + .sha[0:7] + ")"' 2>/dev/null || true)
+          fi
+          if [ -z "$changes" ]; then
+            changes="- 维护性更新，详见提交历史"
+          fi
+
+          {
+            echo "## 本次更新"
+            echo
+            echo "${changes}"
+            echo
+            echo "## 说明"
+            echo
+            echo "适用于 Xiaomi Mi MIX 2S（polaris）的 OrangeFox Recovery R12.0_1 非官方构建。"
+            echo
+            echo "- 源码基线：OrangeFox \`fox_12.1\`（FOX_INTERNAL_RELEASE R12.0）"
+            echo "- 维护者：ZiLing_Fox"
+            echo "- 构建：GitHub Actions / ubuntu-22.04 / commit ${GITHUB_SHA}"
+            echo
+            echo "## 刷入方式"
+            echo
+            echo '```bash'
+            echo "fastboot erase recovery"
+            echo "fastboot flash recovery OrangeFox-R12.0_1-Unofficial-polaris.img"
+            echo "fastboot reboot recovery"
+            echo '```'
+            echo
+            echo "也可以在已有的 Recovery 中直接刷入 .zip，刷入前建议用附带的 .md5 校验。"
+            echo
+            echo "> 注意：cust 分区在动态分区 ROM 上属于 super 的组成块，格式化会破坏系统，请谨慎操作。"
+            echo "> 遇到问题请带上日志提 Issue：https://github.com/KextNor/orangefox-polaris/issues/new?template=bug_report.yml"
+          } > release-notes.md
+
           echo "Creating release: $tag"
           gh release create "$tag" "${files[@]}" \
             --title "OrangeFox R12.0_1 (${tag}) - Xiaomi Mi MIX 2S (polaris)" \
-            --notes "OrangeFox Recovery R12.0_1 (Unofficial) for Xiaomi Mi MIX 2S (polaris)
-
-          - Base: OrangeFox fox_12.1 sources (FOX_INTERNAL_RELEASE R12.0)
-          - Maintainer: ZiLing_Fox
-          - Build: GitHub Actions / ubuntu-22.04 / commit ${GITHUB_SHA}
-
-          Install:
-          - fastboot flash recovery OrangeFox-R12.0_1-Unofficial-polaris.img
-          - or flash the .zip from an existing recovery"
+            --notes-file release-notes.md
 
