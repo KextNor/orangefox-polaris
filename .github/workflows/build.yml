@@ -152,36 +152,24 @@ jobs:
             grep -B1 -A6 "R12 interface refresh" "$f"
           done
 
-      - name: Patch fstab (show dynamic partitions in Manage Partitions)
-        run: |
-          cd $HOME/fox_12.1
-          # TWRP/OrangeFox only lists partitions with Wipe_Available_in_GUI in the
-          # "Manage Partitions" page. The stock dynamic fstab mounts system/vendor
-          # read-only, so they are filtered out. Adding the "formattable" flag
-          # makes them appear there (same behaviour as R11).
-          #
-          # NOTE: cust / metadata is commented out on purpose — on dynamic-
-          # partition ROMs cust lives INSIDE super (BOARD_SUPER_PARTITION_BLOCK_DEVICES
-          # includes cust), so it's NOT an independent device node like
-          # /dev/block/bootdevice/by-name/cust. Adding it to fstab with 'wait'
-          # causes init to hang forever because that node doesn't exist, which
-          # results in the "stuck on first screen" bootloop we saw in Fix4.
-          # Keep cust disabled until we figure out the correct dynamic-partition
-          # mount method.
-          mapfile -t fstabs < <(find device/xiaomi/sdm845-common -name 'recovery-dynamic.fstab')
-          if [ ${#fstabs[@]} -eq 0 ]; then
-            echo "::error::No recovery-dynamic.fstab found; the common device tree was not cloned correctly"
-            exit 1
-          fi
-          for f in "${fstabs[@]}"; do
-            echo "=== patching $f ==="
-            sed -i 's#\(wait,logical,first_stage_mount\)#\1,formattable#' "$f"
-            grep -nE '^(system|system_ext|product|vendor|odm)[[:space:]]' "$f"
-            if ! grep -Eq '^(system|system_ext|product|vendor|odm)[[:space:]].*formattable' "$f"; then
-              echo "::error::Failed to add formattable to $f"
-              exit 1
-            fi
-          done
+      # ============================================================
+      # DO NOT patch recovery-dynamic.fstab with 'formattable'!
+      #
+      # polaris uses RETROFIT dynamic partitions (BOARD_SUPER_PARTITION_BLOCK_DEVICES
+      # := system vendor cust). The super metadata lives at the START of the
+      # physical 'system' partition (BOARD_SUPER_PARTITION_METADATA_DEVICE := system).
+      #
+      # Adding 'formattable' to system/vendor/etc makes OrangeFox treat them as
+      # ordinary physical partitions during wipe/format. mkfs.ext4 then writes
+      # directly to the physical partition, OVERWRITING the super metadata.
+      # On next boot, init reads the corrupted super metadata, fails to create
+      # the logical partitions (system/vendor/cust/...), first_stage_mount fails,
+      # and the device hangs on the OrangeFox splash screen (the "stuck on first
+      # screen" bug we saw in Fix4 and again after 5-wipe on Fix5).
+      #
+      # Dynamic partitions (especially retrofit) must NEVER be marked formattable
+      # in recovery fstab. The stock recovery-dynamic.fstab is correct as-is.
+      # ============================================================
 
       - name: Build OrangeFox Recovery
         run: |
