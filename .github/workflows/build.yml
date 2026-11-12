@@ -99,13 +99,18 @@ jobs:
         run: |
           export PATH=$HOME/.bin:$PATH
           cd $HOME
-          # fox_16.0 uses repo init directly (sync script may not support 16.0 yet)
           mkdir -p $HOME/fox_16.0
           cd $HOME/fox_16.0
-          repo init -u https://gitlab.com/OrangeFox/manifest.git -b fox_16.0 --depth=1
-          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          echo "=== repo init ==="
+          repo init -u https://gitlab.com/OrangeFox/manifest.git -b fox_16.0 --depth=1 2>&1 | tail -20
+          echo "=== repo sync (low concurrency to avoid GitLab rate limit) ==="
+          # Use -j4 instead of -j$(nproc) to avoid GitLab rate limiting
+          # Add --no-clone-bundle and --no-tags to reduce download size
+          repo sync -c -j4 --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune 2>&1 | tail -50
           echo "=== Sync complete ==="
           df -h
+          echo "=== Verify key directories ==="
+          ls -d bootable/recovery build/make vendor/twrp 2>&1 || echo "WARNING: some dirs missing"
 
       - name: Setup device tree
         run: |
