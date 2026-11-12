@@ -131,14 +131,25 @@ jobs:
           find bootable/recovery/gui/theme -path "*About/maintainer.png" -print
           find bootable/recovery/gui/theme -path "*About/maintainer.png" -exec cp -f $GITHUB_WORKSPACE/avatar.png {} \;
 
-          # 2) Credits：定位 "R12 interface refresh" 所在文件并插入名字
+          # 2) Credits：定位 "R12 interface refresh" 所在文件并插入维护者名字
+          #    动态读取匹配行的前导空白并继承它，确保与官方原文对齐（顶格显示）。
           echo "=== Credits candidates ==="
           hits=$(grep -rl "R12 interface refresh" bootable vendor device 2>/dev/null | head -5)
           echo "$hits"
           for f in $hits; do
-            awk '1; /R12 interface refresh/{print "    ZiLing_Fox (polaris maintainer)"}' "$f" > "$f.new" && mv "$f.new" "$f"
+            # 打印原文件缩进信息方便排障
+            echo "--- original indent in $f ---"
+            grep -B1 -A2 "R12 interface refresh" "$f" | cat -A
+            awk '{
+              indent = $0;
+              sub(/[^ \t].*/, "", indent);
+              print;
+              if (/R12 interface refresh/) {
+                print indent "ZiLing_Fox (polaris maintainer)"
+              }
+            }' "$f" > "$f.new" && mv "$f.new" "$f"
             echo "patched: $f"
-            grep -A6 "R12 interface refresh" "$f"
+            grep -B1 -A6 "R12 interface refresh" "$f"
           done
 
       - name: Patch fstab (show logical and cust partitions in Manage Partitions)
