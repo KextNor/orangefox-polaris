@@ -95,31 +95,24 @@ jobs:
             repo --version
           } >"$log" 2>&1
 
-      - name: Sync OrangeFox sources (fox_16.0)
+      - name: Sync OrangeFox sources (fox_12.1)
         run: |
           export PATH=$HOME/.bin:$PATH
           cd $HOME
-          mkdir -p $HOME/fox_16.0
-          cd $HOME/fox_16.0
-          echo "=== repo init ==="
-          repo init -u https://gitlab.com/OrangeFox/manifest.git -b fox_16.0 --depth=1 2>&1 | tail -20
-          echo "=== repo sync (low concurrency to avoid GitLab rate limit) ==="
-          # Use -j4 instead of -j$(nproc) to avoid GitLab rate limiting
-          # Add --no-clone-bundle and --no-tags to reduce download size
-          repo sync -c -j4 --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune 2>&1 | tail -50
+          # Use official OrangeFox sync script (optimized: SSH + shallow clone)
+          git clone https://gitlab.com/OrangeFox/Misc.git $HOME/of-misc
+          bash $HOME/of-misc/orangefox_sync.sh --branch 12.1 --ssh --path $HOME/fox_12.1
           echo "=== Sync complete ==="
           df -h
-          echo "=== Verify key directories ==="
-          ls -d bootable/recovery build/make vendor/twrp 2>&1 || echo "WARNING: some dirs missing"
 
       - name: Setup device tree
         run: |
-          cd $HOME/fox_16.0
+          cd $HOME/fox_12.1
           mkdir -p device/xiaomi
           # Clone official polaris tree (contains prebuilt kernel)
-          git clone --depth=1 https://gitlab.com/OrangeFox/device/polaris.git -b fox_16.0 device/xiaomi/polaris
+          git clone --depth=1 https://gitlab.com/OrangeFox/device/polaris.git -b fox_12.1 device/xiaomi/polaris
           # Clone the common tree now; Patch fstab runs before lunch would fetch it.
-          git clone --depth=1 https://gitlab.com/OrangeFox/device/sdm845-common.git -b fox_16.0 device/xiaomi/sdm845-common
+          git clone --depth=1 https://gitlab.com/OrangeFox/device/sdm845-common.git -b fox_12.1 device/xiaomi/sdm845-common
           # Copy custom device tree files from this repo (overrides official)
           cp -f $GITHUB_WORKSPACE/Android.mk device/xiaomi/polaris/
           cp -f $GITHUB_WORKSPACE/AndroidProducts.mk device/xiaomi/polaris/
@@ -132,7 +125,7 @@ jobs:
 
       - name: Customize theme (avatar + credits)
         run: |
-          cd $HOME/fox_16.0
+          cd $HOME/fox_12.1
           # 1) About 页面的维护者头像：主题资源 Default/About/maintainer.png
           echo "=== Avatar targets ==="
           find bootable/recovery/gui/theme -path "*About/maintainer.png" -print
@@ -215,7 +208,7 @@ jobs:
 
       - name: Build OrangeFox Recovery
         run: |
-          cd $HOME/fox_16.0
+          cd $HOME/fox_12.1
           set +e
           export ALLOW_MISSING_DEPENDENCIES=true
           export FOX_BUILD_DEVICE=polaris
@@ -237,21 +230,21 @@ jobs:
       - name: Show build output
         if: always()
         run: |
-          ls -lh $HOME/fox_16.0/out/target/product/polaris/*.img 2>/dev/null || echo "No .img files found"
-          ls -lh $HOME/fox_16.0/out/target/product/polaris/*.zip 2>/dev/null || echo "No .zip files found"
+          ls -lh $HOME/fox_12.1/out/target/product/polaris/*.img 2>/dev/null || echo "No .img files found"
+          ls -lh $HOME/fox_12.1/out/target/product/polaris/*.zip 2>/dev/null || echo "No .zip files found"
           echo "=== Exact image size (bytes) ==="
-          stat -c '%n %s' $HOME/fox_16.0/out/target/product/polaris/*.img 2>/dev/null || echo "n/a"
+          stat -c '%n %s' $HOME/fox_12.1/out/target/product/polaris/*.img 2>/dev/null || echo "n/a"
           echo "=== Last 100 lines of build log ==="
-          tail -100 $HOME/fox_16.0/build.log 2>/dev/null || echo "No build log"
+          tail -100 $HOME/fox_12.1/build.log 2>/dev/null || echo "No build log"
 
       - name: Collect artifacts
         if: always()
         run: |
           mkdir -p $GITHUB_WORKSPACE/artifacts
-          cp -f $HOME/fox_16.0/out/target/product/polaris/OrangeFox-*.img $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_16.0/out/target/product/polaris/OrangeFox-*.zip $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_16.0/out/target/product/polaris/OrangeFox-*.md5 $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_16.0/build.log $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.img $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.zip $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.md5 $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_12.1/build.log $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
           ls -lh $GITHUB_WORKSPACE/artifacts/
 
       - name: Upload build artifacts
