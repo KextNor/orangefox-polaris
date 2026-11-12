@@ -141,7 +141,7 @@ jobs:
             grep -A6 "R12 interface refresh" "$f"
           done
 
-      - name: Patch fstab (show logical partitions in Manage Partitions)
+      - name: Patch fstab (show logical and cust partitions in Manage Partitions)
         run: |
           cd $HOME/fox_12.1
           # TWRP/OrangeFox only lists partitions with Wipe_Available_in_GUI in the
@@ -159,6 +159,44 @@ jobs:
             grep -nE '^(system|system_ext|product|vendor|odm)[[:space:]]' "$f"
             if ! grep -Eq '^(system|system_ext|product|vendor|odm)[[:space:]].*formattable' "$f"; then
               echo "::error::Failed to add formattable to $f"
+              exit 1
+            fi
+
+            # Enable the physical cust partition. MIUI on polaris has a real
+            # 832 MiB cust partition (verified from V12.5.1.0.QDGCNXM partition.xml).
+            # Note: on dynamic-partition ROMs cust is part of super, so formatting
+            # it wipes super. This is enabled intentionally per maintainer request.
+            sed -i '/^# \[\/cust is now a dynamic block in super\]/d' "$f"
+            sed -i '/^#\/dev\/block\/by-name\/cust/d' "$f"
+            if ! grep -q '^/dev/block/bootdevice/by-name/cust' "$f"; then
+              echo '/dev/block/bootdevice/by-name/cust       /cust                   ext4    noatime,nosuid,nodev,discard,data=journal,commit=1                wait,formattable' >> "$f"
+            fi
+            if ! grep -Eq '^/dev/block/bootdevice/by-name/cust[[:space:]]+/cust[[:space:]].*formattable' "$f"; then
+              echo "::error::Failed to enable cust entry in $f"
+              exit 1
+            fi
+            grep -n 'cust' "$f"
+          done
+
+          # twrp.flags controls what shows up in Wipe / Manage Partitions lists.
+          mapfile -t flags < <(find device/xiaomi/sdm845-common -name 'twrp-dynamic.flags')
+          if [ ${#flags[@]} -eq 0 ]; then
+            echo "::error::No twrp-dynamic.flags found"
+            exit 1
+          fi
+          for f in "${flags[@]}"; do
+            echo "=== patching $f ==="
+            sed -i '/^# metadata\/cust/d' "$f"
+            sed -i '/^#\/metadata/d' "$f"
+            if ! grep -q '^/cust ' "$f"; then
+              echo '/cust        ext4   /dev/block/bootdevice/by-name/cust                 flags=display="Cust";backup=1;wipeingui' >> "$f"
+            fi
+            if ! grep -q '^/cust_image ' "$f"; then
+              echo '/cust_image  emmc   /dev/block/bootdevice/by-name/cust                 flags=display="Cust(Image)";backup=0;flashimg=1' >> "$f"
+            fi
+            grep -n 'cust' "$f"
+            if ! grep -q '^/cust ' "$f"; then
+              echo "::error::Failed to enable cust in $f"
               exit 1
             fi
           done
