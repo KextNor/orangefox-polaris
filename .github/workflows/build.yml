@@ -523,6 +523,21 @@ jobs:
           [ "$BAD" -eq 0 ] || { echo "::error::fstab patch validation failed"; exit 1; }
           echo "fstab patch OK: all dynamic partitions have logical+wipeingui, no formattable"
 
+      - name: Configure swap
+        run: |
+          free -h
+          FREEG=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Free disk: ${FREEG}G"
+          if [ "$FREEG" -gt 15 ]; then
+            sudo fallocate -l 6G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=6144 status=none
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile > /dev/null
+            sudo swapon /swapfile && echo "swap enabled: 6G"
+          else
+            echo "skip swap: only ${FREEG}G free"
+          fi
+          free -h
+
       - name: Build OrangeFox Recovery
         run: |
           cd $HOME/fox_16.0
@@ -541,7 +556,7 @@ jobs:
             exit "$LUNCH_EXIT"
           fi
           echo "=== Starting build ==="
-          mka recoveryimage 2>&1 | tee build.log
+          mka -j3 recoveryimage 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           echo "=== Build exit code: $BUILD_EXIT ==="
           if [ "$BUILD_EXIT" -ne 0 ]; then
