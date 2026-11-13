@@ -544,6 +544,10 @@ jobs:
           mka recoveryimage 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           echo "=== Build exit code: $BUILD_EXIT ==="
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "=== Last 300 lines of failed build log ==="
+            tail -300 build.log || true
+          fi
           echo "=== Disk space after build ==="
           df -h
           exit $BUILD_EXIT
