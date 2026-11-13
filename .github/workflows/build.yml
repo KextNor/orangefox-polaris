@@ -523,18 +523,26 @@ jobs:
           [ "$BAD" -eq 0 ] || { echo "::error::fstab patch validation failed"; exit 1; }
           echo "fstab patch OK: all dynamic partitions have logical+wipeingui, no formattable"
 
-      - name: Configure swap
+      - name: Configure extra swap
+        continue-on-error: true
         run: |
           free -h
+          SWAPFILE=/swapfile-extra
+          sudo swapoff "$SWAPFILE" 2>/dev/null || true
+          sudo rm -f "$SWAPFILE"
           FREEG=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
           echo "Free disk: ${FREEG}G"
-          if [ "$FREEG" -gt 15 ]; then
-            sudo fallocate -l 6G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=6144 status=none
-            sudo chmod 600 /swapfile
-            sudo mkswap /swapfile > /dev/null
-            sudo swapon /swapfile && echo "swap enabled: 6G"
+          if [ "${FREEG:-0}" -gt 20 ]; then
+            if sudo fallocate -l 6G "$SWAPFILE" 2>/dev/null; then
+              sudo chmod 600 "$SWAPFILE"
+              sudo mkswap "$SWAPFILE" > /dev/null
+              sudo swapon "$SWAPFILE" && echo "extra swap enabled: 6G"
+            else
+              echo "fallocate failed; continuing without extra swap"
+              sudo rm -f "$SWAPFILE" || true
+            fi
           else
-            echo "skip swap: only ${FREEG}G free"
+            echo "skip extra swap: ${FREEG:-0}G free"
           fi
           free -h
 
