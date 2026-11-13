@@ -3,7 +3,7 @@ name: Build OrangeFox Recovery for polaris
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, fox_16.0 ]
 
 permissions:
   contents: write
@@ -95,7 +95,7 @@ jobs:
             repo --version
           } >"$log" 2>&1
 
-      - name: Sync OrangeFox sources (fox_12.1)
+      - name: Sync OrangeFox sources (fox_16.0)
         run: |
           export PATH=$HOME/.bin:$PATH
           export GIT_TERMINAL_PROMPT=0
@@ -104,18 +104,18 @@ jobs:
           # The Misc.git URL used in run #43 asks for GitLab credentials in Actions.
           git clone --depth=1 https://gitlab.com/OrangeFox/sync.git OrangeFox_sync
           cd OrangeFox_sync
-          ./orangefox_sync.sh --branch 12.1 --path $HOME/fox_12.1
+          ./orangefox_sync.sh --branch 16.0 --path $HOME/fox_16.0
           echo "=== Sync complete ==="
           df -h
 
       - name: Setup device tree
         run: |
-          cd $HOME/fox_12.1
+          cd $HOME/fox_16.0
           mkdir -p device/xiaomi
-          # Clone official polaris tree (contains prebuilt kernel)
+          # No official polaris fox_16.0 branch exists; port from the fox_12.1 device base.
           git clone --depth=1 https://gitlab.com/OrangeFox/device/polaris.git -b fox_12.1 device/xiaomi/polaris
           # Clone the common tree now; Patch fstab runs before lunch would fetch it.
-          git clone --depth=1 https://gitlab.com/OrangeFox/device/sdm845-common.git -b fox_12.1 device/xiaomi/sdm845-common
+          git clone --depth=1 https://gitlab.com/OrangeFox/device/sdm845-common.git -b fox_16.0 device/xiaomi/sdm845-common
           # Copy custom device tree files from this repo (overrides official)
           cp -f $GITHUB_WORKSPACE/Android.mk device/xiaomi/polaris/
           cp -f $GITHUB_WORKSPACE/AndroidProducts.mk device/xiaomi/polaris/
@@ -128,7 +128,7 @@ jobs:
 
       - name: Customize theme (avatar + credits)
         run: |
-          cd $HOME/fox_12.1
+          cd $HOME/fox_16.0
           # 1) About 页面的维护者头像：主题资源 Default/About/maintainer.png
           echo "=== Avatar targets ==="
           find bootable/recovery/gui/theme -path "*About/maintainer.png" -print
@@ -158,7 +158,7 @@ jobs:
       - name: Patch OrangeFox source (physical super, writable dm, wipe, refresh)
         run: |
           set -e
-          cd $HOME/fox_12.1/bootable/recovery
+          cd $HOME/fox_16.0/bootable/recovery
           echo "=== Patching OrangeFox dynamic partition handling ==="
           PATCH_FILE="$RUNNER_TEMP/polaris-dynamic-partitions.patch"
           cat > "$PATCH_FILE" << 'POLARIS_PATCH'
@@ -461,8 +461,9 @@ jobs:
              if (builder == nullptr) {
                LOG(ERROR) << "Failed to load dynamic partition metadata.";
           POLARIS_PATCH
-          git apply --check "$PATCH_FILE"
-          git apply "$PATCH_FILE"
+          # fox_16.0 removed bootable/recovery/updater; the other four files still apply cleanly.
+          git apply --check --exclude=updater/updater_runtime_dynamic_partitions.cpp "$PATCH_FILE"
+          git apply --exclude=updater/updater_runtime_dynamic_partitions.cpp "$PATCH_FILE"
           git diff --check
           git diff --stat
           echo "=== OrangeFox source patch applied and verified ==="
@@ -470,7 +471,7 @@ jobs:
       - name: Patch fstab (add wipeingui to dynamic partitions)
         run: |
           set -e
-          cd $HOME/fox_12.1
+          cd $HOME/fox_16.0
           FSTAB_DIR="device/xiaomi/sdm845-common/recovery/kernel_44/fstab_files"
           FSTAB="$FSTAB_DIR/recovery-dynamic.fstab"
           [ -f "$FSTAB" ] || FSTAB=$(find device/xiaomi/sdm845-common -name 'recovery-dynamic.fstab' | head -1)
@@ -522,9 +523,24 @@ jobs:
           [ "$BAD" -eq 0 ] || { echo "::error::fstab patch validation failed"; exit 1; }
           echo "fstab patch OK: all dynamic partitions have logical+wipeingui, no formattable"
 
+      - name: Configure swap
+        run: |
+          free -h
+          FREEG=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Free disk: ${FREEG}G"
+          if [ "$FREEG" -gt 15 ]; then
+            sudo fallocate -l 6G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=6144 status=none
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile > /dev/null
+            sudo swapon /swapfile && echo "swap enabled: 6G"
+          else
+            echo "skip swap: only ${FREEG}G free"
+          fi
+          free -h
+
       - name: Build OrangeFox Recovery
         run: |
-          cd $HOME/fox_12.1
+          cd $HOME/fox_16.0
           set +e
           export ALLOW_MISSING_DEPENDENCIES=true
           export FOX_BUILD_DEVICE=polaris
@@ -533,12 +549,20 @@ jobs:
           source build/envsetup.sh
           echo "=== envsetup.sh done, exit: $? ==="
           echo "=== Running lunch ==="
-          lunch twrp_polaris-eng
-          echo "=== lunch done, exit: $? ==="
+          lunch twrp_polaris-bp2a-eng
+          LUNCH_EXIT=$?
+          echo "=== lunch done, exit: $LUNCH_EXIT ==="
+          if [ "$LUNCH_EXIT" -ne 0 ]; then
+            exit "$LUNCH_EXIT"
+          fi
           echo "=== Starting build ==="
-          mka adbd recoveryimage 2>&1 | tee build.log
+          mka -j3 recoveryimage 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           echo "=== Build exit code: $BUILD_EXIT ==="
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "=== Last 300 lines of failed build log ==="
+            tail -300 build.log || true
+          fi
           echo "=== Disk space after build ==="
           df -h
           exit $BUILD_EXIT
@@ -546,28 +570,28 @@ jobs:
       - name: Show build output
         if: always()
         run: |
-          ls -lh $HOME/fox_12.1/out/target/product/polaris/*.img 2>/dev/null || echo "No .img files found"
-          ls -lh $HOME/fox_12.1/out/target/product/polaris/*.zip 2>/dev/null || echo "No .zip files found"
+          ls -lh $HOME/fox_16.0/out/target/product/polaris/*.img 2>/dev/null || echo "No .img files found"
+          ls -lh $HOME/fox_16.0/out/target/product/polaris/*.zip 2>/dev/null || echo "No .zip files found"
           echo "=== Exact image size (bytes) ==="
-          stat -c '%n %s' $HOME/fox_12.1/out/target/product/polaris/*.img 2>/dev/null || echo "n/a"
+          stat -c '%n %s' $HOME/fox_16.0/out/target/product/polaris/*.img 2>/dev/null || echo "n/a"
           echo "=== Last 100 lines of build log ==="
-          tail -100 $HOME/fox_12.1/build.log 2>/dev/null || echo "No build log"
+          tail -100 $HOME/fox_16.0/build.log 2>/dev/null || echo "No build log"
 
       - name: Collect artifacts
         if: always()
         run: |
           mkdir -p $GITHUB_WORKSPACE/artifacts
-          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.img $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.zip $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_12.1/out/target/product/polaris/OrangeFox-*.md5 $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
-          cp -f $HOME/fox_12.1/build.log $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_16.0/out/target/product/polaris/OrangeFox-*.img $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_16.0/out/target/product/polaris/OrangeFox-*.zip $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_16.0/out/target/product/polaris/OrangeFox-*.md5 $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
+          cp -f $HOME/fox_16.0/build.log $GITHUB_WORKSPACE/artifacts/ 2>/dev/null || true
           ls -lh $GITHUB_WORKSPACE/artifacts/
 
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OrangeFox-polaris
+          name: OrangeFox-polaris-fox16
           path: |
             artifacts/*.img
             artifacts/*.zip
@@ -598,7 +622,7 @@ jobs:
           # 统计已有 Fix 前缀的 release 数量，自动递增
           n=$(gh release list --limit 200 --json tagName --jq '[.[] | select(.tagName | startswith("Fix"))] | length')
           n=$((n+1))
-          tag="Fix${n}-v12.0_1-polaris"
+          tag="Fix${n}-fox_16.0-polaris"
 
           # 本次更新：列出上一个 Release 到当前提交之间的改动
           prev_tag=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)
@@ -610,6 +634,7 @@ jobs:
           if [ -z "$changes" ]; then
             changes="- 维护性更新，详见提交历史"
           fi
+          recovery_img=$(basename "$(find artifacts -maxdepth 1 -type f -name 'OrangeFox-*.img' -print -quit)")
 
           {
             echo "## 本次更新"
@@ -618,9 +643,9 @@ jobs:
             echo
             echo "## 说明"
             echo
-            echo "适用于 Xiaomi Mi MIX 2S（polaris）的 OrangeFox Recovery R12.0_1 非官方构建。"
+            echo "适用于 Xiaomi Mi MIX 2S（polaris）的 OrangeFox Recovery fox_16.0 实验性非官方构建。"
             echo
-            echo "- 源码基线：OrangeFox \`fox_12.1\`（FOX_INTERNAL_RELEASE R12.0）"
+            echo "- 源码基线：OrangeFox \`fox_16.0\`（上游 FOX_INTERNAL_RELEASE 仍为 R12.0）"
             echo "- 维护者：ZiLing_Fox"
             echo "- 构建：GitHub Actions / ubuntu-22.04 / commit ${GITHUB_SHA}"
             echo
@@ -628,7 +653,7 @@ jobs:
             echo
             echo '```bash'
             echo "fastboot erase recovery"
-            echo "fastboot flash recovery OrangeFox-R12.0_1-Unofficial-polaris.img"
+            echo "fastboot flash recovery ${recovery_img}"
             echo "fastboot reboot recovery"
             echo '```'
             echo
@@ -640,6 +665,6 @@ jobs:
 
           echo "Creating release: $tag"
           gh release create "$tag" "${files[@]}" \
-            --title "OrangeFox R12.0_1 (${tag}) - Xiaomi Mi MIX 2S (polaris)" \
+            --title "OrangeFox fox_16.0 Experimental (${tag}) - Xiaomi Mi MIX 2S (polaris)" \
             --notes-file release-notes.md
 
